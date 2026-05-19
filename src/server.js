@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
-import pool from './db/db.js';
+import pool from './config/db.js';
 
 dotenv.config();
 
@@ -24,7 +24,7 @@ app.get('/api/health', (req, res) => {
 // TEST DATABASE CONNECTION ON BOOT
 try {
     const res = await pool.query('SELECT NOW()');
-    console.log(`📡 Database connection verified! Current time from DB: ${res.rows[0].now}`);
+    console.log(`s Database connection verified! Current time from DB: ${res.rows[0].now}`);
 } catch (err) {
     console.error(' Database connection error:', err.message);
 }
