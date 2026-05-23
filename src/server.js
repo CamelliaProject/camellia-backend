@@ -9,6 +9,9 @@ import reviewRoutes from './routes/reviewRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import userRoutes from './routes/userRoutes.js';
 import resourceRoutes from './routes/resourceRoutes.js';
+import adminRoutes from './routes/adminRoutes.js';
+import plantationRequestRoutes from './routes/plantationRequestRoutes.js';
+import authRoutes from './routes/authRoutes.js';
 
 dotenv.config();
 
@@ -28,6 +31,9 @@ app.use('/api/reviews', reviewRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/resources', resourceRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/plantation-requests', plantationRequestRoutes);
+app.use('/api', authRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({

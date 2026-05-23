@@ -21,7 +21,7 @@ async function authenticate(req, res, next) {
 		const email = decoded.email || null;
 
 		const query = `
-			SELECT id, uid, email, name, role, created_at, updated_at
+			SELECT id, uid, identity_id, username, name, email, role, plantation_id, created_at, updated_at
 			FROM users
 			WHERE uid = $1 OR ($2 IS NOT NULL AND email = $2)
 			LIMIT 1
