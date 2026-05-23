@@ -2,6 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import dotenv from 'dotenv';
 import pool from './config/db.js';
+import plantationRoutes from './routes/plantationRoutes.js';
+import experienceRoutes from './routes/experienceRoutes.js';
+import bookingRoutes from './routes/bookingRoutes.js';
+import reviewRoutes from './routes/reviewRoutes.js';
+import paymentRoutes from './routes/paymentRoutes.js';
+import userRoutes from './routes/userRoutes.js';
+import resourceRoutes from './routes/resourceRoutes.js';
 
 dotenv.config();
 
@@ -13,6 +20,14 @@ app.use(cors({
     credentials: true
 }));
 app.use(express.json());
+
+app.use('/api/plantations', plantationRoutes);
+app.use('/api/experiences', experienceRoutes);
+app.use('/api/bookings', bookingRoutes);
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/payments', paymentRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/resources', resourceRoutes);
 
 app.get('/api/health', (req, res) => {
     res.status(200).json({

@@ -1,7 +1,7 @@
 import pool from '../config/db.js';
+import crypto from 'crypto';
 
 export async function syncUser(req, res) {
-  // Accept either `uid` (Firebase) or `identityId` from the frontend
   const { uid, identityId, name, email } = req.body;
   const uniqueId = uid || identityId;
 
@@ -12,7 +12,6 @@ export async function syncUser(req, res) {
   }
 
   try {
-    // Check for existing user by uid, identity_id, or email (parameterized)
     const selectQuery = `
       SELECT * FROM users
       WHERE uid = $1 OR identity_id = $1 OR email = $2
@@ -24,15 +23,17 @@ export async function syncUser(req, res) {
       return res.status(200).json(selectResult.rows[0]);
     }
 
-    // Create a new user with a default role
+    const defaultRole = 'tourist';
+    const username = email.split('@')[0] + '-' + crypto.randomBytes(3).toString('hex');
+    const passwordHash = crypto.randomBytes(16).toString('hex');
+
     const insertQuery = `
-      INSERT INTO users (uid, identity_id, name, email, role)
-      VALUES ($1, $2, $3, $4, $5)
+      INSERT INTO users (uid, identity_id, username, email, password_hash, role, created_at, updated_at)
+      VALUES ($1, $2, $3, $4, $5, $6, now(), now())
       RETURNING *
     `;
-    const defaultRole = 'tourist';
-    const insertValues = [uid || null, identityId || null, name, email, defaultRole];
 
+    const insertValues = [uid || null, identityId || null, username, email, passwordHash, defaultRole];
     const insertResult = await pool.query(insertQuery, insertValues);
 
     return res.status(201).json(insertResult.rows[0]);
