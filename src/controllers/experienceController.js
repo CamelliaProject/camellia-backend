@@ -202,3 +202,39 @@ export async function deleteExperience(req, res) {
     return res.status(500).json({ error: 'Failed to delete experience.' });
   }
 }
+export async function createExperienceSlot(req, res) {
+  const { experience_id, slot_date, slot_time, available_seats } = req.body;
+
+  if (!experience_id || !slot_date || !slot_time) {
+    return res.status(400).json({
+      error: 'experience_id, slot_date, and slot_time are required.'
+    });
+  }
+
+  try {
+    const query = `
+      INSERT INTO time_slots (
+        experience_id,
+        slot_date,
+        slot_time,
+        available_seats
+      )
+      VALUES ($1, $2, $3, $4)
+      RETURNING *
+    `;
+
+    const values = [
+      experience_id,
+      slot_date,
+      slot_time,
+      available_seats || 0
+    ];
+
+    const { rows } = await pool.query(query, values);
+
+    return res.status(201).json({ data: rows[0] });
+  } catch (error) {
+    console.error('createExperienceSlot error:', error);
+    return res.status(500).json({ error: 'Failed to create experience slot.' });
+  }
+}
