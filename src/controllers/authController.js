@@ -118,7 +118,7 @@ export async function adminLogin(req, res) {
     }
 
     const { rows } = await pool.query(
-      `SELECT id, username, email, role, plantation_id, uid
+      `SELECT id, username, email, role, plantation_id, uid, password_changed
        FROM users
        WHERE username = $1 AND password_hash = $2
          AND role IN ('superadmin', 'plantationadmin')
@@ -155,6 +155,7 @@ export async function adminLogin(req, res) {
         role: user.role,
         plantationId: user.plantation_id,
         uid: firebaseUid,
+        passwordChanged: user.password_changed || false,
       },
     });
   } catch (error) {
