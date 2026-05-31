@@ -25,10 +25,14 @@ export async function getAllPlantationsForAdmin(req, res) {
         p.id, p.name, p.address, p.description, p.phone, p.email,
         p.main_image_url, p.rating, p.total_reviews,
         p.is_disabled, p.is_published, p.created_at,
-        u.username  AS admin_username,
-        u.password_changed
+        u.username AS admin_username,
+        u.name     AS owner_name,
+        u.password_changed,
+        CASE WHEN u.password_changed = true THEN NULL ELSE u.password_hash END AS admin_password,
+        pr.business_registration
       FROM plantations p
       LEFT JOIN users u ON u.plantation_id = p.id AND u.role = 'plantationadmin'
+      LEFT JOIN plantation_requests pr ON pr.name = p.name AND pr.status = 'approved'
       ORDER BY p.created_at DESC
     `);
     return res.status(200).json({ data: rows });
