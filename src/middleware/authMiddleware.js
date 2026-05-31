@@ -23,7 +23,7 @@ async function authenticate(req, res, next) {
 		const query = `
 			SELECT id, uid, identity_id, username, name, email, role, plantation_id, created_at, updated_at
 			FROM users
-			WHERE uid = $1 OR ($2 IS NOT NULL AND email = $2)
+			WHERE uid = $1 OR ($2::text IS NOT NULL AND email = $2::text)
 			LIMIT 1
 		`;
 

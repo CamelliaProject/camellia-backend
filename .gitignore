@@ -11,6 +11,9 @@ yarn-error.log*
 firebase-service-account.json
 .env
 
+# One-time seed script contains credentials — keep off GitHub
+src/db/seed.js
+
 # Dependency folders
 node_modules/
 dist/

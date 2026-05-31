@@ -7,30 +7,21 @@ cloudinary.config({
   secure: true,
 });
 
+export async function uploadFile(fileBuffer, { folder = 'camellia', resourceType = 'auto' } = {}) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { resource_type: resourceType, folder },
+      (error, result) => {
+        if (error) return reject(error);
+        if (!result?.secure_url) return reject(new Error('Cloudinary did not return a secure URL.'));
+        resolve(result.secure_url);
+      }
+    );
+    stream.end(fileBuffer);
+  });
+}
+
+// Backward-compatible alias used by other controllers
 export async function uploadImage(fileBuffer) {
-  try {
-    const result = await new Promise((resolve, reject) => {
-      const uploadStream = cloudinary.uploader.upload_stream(
-        { resource_type: 'auto' },
-        (error, uploadResult) => {
-          if (error) {
-            return reject(error);
-          }
-
-          if (!uploadResult || !uploadResult.secure_url) {
-            return reject(new Error('Cloudinary upload did not return a secure URL.'));
-          }
-
-          resolve(uploadResult);
-        }
-      );
-
-      uploadStream.end(fileBuffer);
-    });
-
-    return result.secure_url;
-  } catch (error) {
-    console.error('Cloudinary upload error:', error);
-    throw error;
-  }
+  return uploadFile(fileBuffer, { folder: 'camellia/plantations', resourceType: 'image' });
 }

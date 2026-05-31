@@ -6,9 +6,12 @@ import {
   getPlantationReviews,
   addReviewReply,
 } from '../controllers/adminController.js';
+import { getAllPlantationsForAdmin } from '../controllers/plantationController.js';
 
 const router = express.Router();
 router.use(authenticate);
+
+router.get('/plantations', checkRole('superadmin'), getAllPlantationsForAdmin);
 
 router.get('/bookings/:plantationId', checkRole('superadmin', 'plantationadmin'), getPlantationBookings);
 router.put('/bookings/:plantationId/:bookingId', checkRole('superadmin', 'plantationadmin'), updateBookingStatus);

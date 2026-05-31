@@ -6,7 +6,7 @@ export async function getPlantations(req, res) {
     const result = await pool.query(
       `SELECT id, name, address, description, main_image_url, rating, total_reviews, is_disabled, created_at
        FROM plantations
-       WHERE is_disabled = false
+       WHERE is_disabled = false AND detailed_description IS NOT NULL
        ORDER BY created_at DESC`
     );
 
@@ -14,6 +14,44 @@ export async function getPlantations(req, res) {
   } catch (error) {
     console.error('getPlantations error:', error);
     return res.status(500).json({ error: 'Failed to fetch plantations.' });
+  }
+}
+
+// Super-admin only: returns ALL plantations with publish status and admin credential info
+export async function getAllPlantationsForAdmin(req, res) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        p.id, p.name, p.address, p.description, p.phone, p.email,
+        p.main_image_url, p.rating, p.total_reviews,
+        p.is_disabled, p.is_published, p.created_at,
+        u.username  AS admin_username,
+        u.password_changed
+      FROM plantations p
+      LEFT JOIN users u ON u.plantation_id = p.id AND u.role = 'plantationadmin'
+      ORDER BY p.created_at DESC
+    `);
+    return res.status(200).json({ data: rows });
+  } catch (error) {
+    console.error('getAllPlantationsForAdmin error:', error);
+    return res.status(500).json({ error: 'Failed to fetch plantations.' });
+  }
+}
+
+// Plantation admin: mark their plantation as published/live
+export async function publishPlantation(req, res) {
+  const { id } = req.params;
+  try {
+    const { rows } = await pool.query(
+      `UPDATE plantations SET is_published = true, updated_at = now()
+       WHERE id = $1 RETURNING id, name, is_published`,
+      [id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Plantation not found.' });
+    return res.status(200).json({ data: rows[0] });
+  } catch (error) {
+    console.error('publishPlantation error:', error);
+    return res.status(500).json({ error: 'Failed to publish plantation.' });
   }
 }
 
