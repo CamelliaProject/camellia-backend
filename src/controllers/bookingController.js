@@ -89,28 +89,44 @@ export async function getBookings(req, res) {
     let query = '';
     let values = [];
 
+    const experienceSubquery = `
+      COALESCE(
+        json_agg(e.name ORDER BY e.name) FILTER (WHERE e.name IS NOT NULL),
+        '[]'
+      ) AS experience_names
+    `;
+
     if (user.role === 'superadmin') {
       query = `
-        SELECT b.*, p.name AS plantation_name
+        SELECT b.*, p.name AS plantation_name, ${experienceSubquery}
         FROM bookings b
         LEFT JOIN plantations p ON p.id = b.plantation_id
+        LEFT JOIN booking_experiences be ON be.booking_id = b.id
+        LEFT JOIN experiences e ON e.id = be.experience_id
+        GROUP BY b.id, p.name
         ORDER BY b.created_at DESC
       `;
     } else if (user.role === 'plantationadmin') {
       query = `
-        SELECT b.*, p.name AS plantation_name
+        SELECT b.*, p.name AS plantation_name, ${experienceSubquery}
         FROM bookings b
         LEFT JOIN plantations p ON p.id = b.plantation_id
+        LEFT JOIN booking_experiences be ON be.booking_id = b.id
+        LEFT JOIN experiences e ON e.id = be.experience_id
         WHERE b.plantation_id = $1
+        GROUP BY b.id, p.name
         ORDER BY b.created_at DESC
       `;
       values = [user.plantation_id];
     } else {
       query = `
-        SELECT b.*, p.name AS plantation_name
+        SELECT b.*, p.name AS plantation_name, ${experienceSubquery}
         FROM bookings b
         LEFT JOIN plantations p ON p.id = b.plantation_id
+        LEFT JOIN booking_experiences be ON be.booking_id = b.id
+        LEFT JOIN experiences e ON e.id = be.experience_id
         WHERE b.tourist_id = $1
+        GROUP BY b.id, p.name
         ORDER BY b.created_at DESC
       `;
       values = [user.id];

@@ -6,10 +6,18 @@ export async function getPlantationBookings(req, res) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT b.*, u.username AS tourist_username, u.email AS tourist_email
+      `SELECT b.*,
+              u.username AS tourist_username,
+              COALESCE(
+                json_agg(e.name ORDER BY e.name) FILTER (WHERE e.name IS NOT NULL),
+                '[]'
+              ) AS experience_names
        FROM bookings b
        LEFT JOIN users u ON u.id = b.tourist_id
+       LEFT JOIN booking_experiences be ON be.booking_id = b.id
+       LEFT JOIN experiences e ON e.id = be.experience_id
        WHERE b.plantation_id = $1
+       GROUP BY b.id, u.username
        ORDER BY b.created_at DESC`,
       [plantationId]
     );
