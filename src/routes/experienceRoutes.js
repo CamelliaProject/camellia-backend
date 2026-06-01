@@ -22,9 +22,9 @@ router.use(authenticate);
 
 const ADMIN_ROLES = ['superadmin', 'plantationadmin'];
 
-router.post('/', checkRole(...ADMIN_ROLES), upload.single('image'), createExperience);
+router.post('/', checkRole(...ADMIN_ROLES), upload.array('images', 10), createExperience);
 router.post('/:id/slots', checkRole(...ADMIN_ROLES), createExperienceSlot);
-router.put('/:id', checkRole(...ADMIN_ROLES), upload.single('image'), updateExperience);
+router.put('/:id', checkRole(...ADMIN_ROLES), upload.array('images', 10), updateExperience);
 router.delete('/:id', checkRole(...ADMIN_ROLES), deleteExperience);
 
 export default router;

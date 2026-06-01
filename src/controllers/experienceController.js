@@ -112,12 +112,26 @@ export async function createExperience(req, res) {
     ];
 
     const { rows } = await pool.query(insertQuery, values);
+    const experienceId = rows[0].id;
 
-    if (req.file?.buffer) {
-      const imageUrl = await uploadImage(req.file.buffer);
-      await pool.query('INSERT INTO experience_images (experience_id, image_url) VALUES ($1, $2)', [rows[0].id, imageUrl]);
-      rows[0].image_url = imageUrl;
+    // Upload all provided images to Cloudinary and save to experience_images
+    const files = req.files || (req.file ? [req.file] : []);
+    if (files.length > 0) {
+      const uploadedUrls = await Promise.all(files.map(f => uploadImage(f.buffer)));
+      for (const url of uploadedUrls) {
+        await pool.query(
+          'INSERT INTO experience_images (experience_id, image_url) VALUES ($1, $2)',
+          [experienceId, url]
+        );
+      }
     }
+
+    // Return with images array so the frontend can display them immediately
+    const imagesResult = await pool.query(
+      'SELECT image_url FROM experience_images WHERE experience_id = $1 ORDER BY sort_order, created_at',
+      [experienceId]
+    );
+    rows[0].images = imagesResult.rows.map(r => r.image_url);
 
     return res.status(201).json({ data: rows[0] });
   } catch (error) {
@@ -155,9 +169,13 @@ export async function updateExperience(req, res) {
       }
     });
 
-    if (fields.length === 0 && !req.file?.buffer) {
+    const files = req.files || (req.file ? [req.file] : []);
+
+    if (fields.length === 0 && files.length === 0) {
       return res.status(400).json({ error: 'No valid fields provided for update.' });
     }
+
+    let updatedRow = null;
 
     if (fields.length) {
       values.push(id);
@@ -166,21 +184,33 @@ export async function updateExperience(req, res) {
       if (!result.rows.length) {
         return res.status(404).json({ error: 'Experience not found.' });
       }
-      if (req.file?.buffer) {
-        const imageUrl = await uploadImage(req.file.buffer);
-        await pool.query('INSERT INTO experience_images (experience_id, image_url) VALUES ($1, $2)', [id, imageUrl]);
-        result.rows[0].image_url = imageUrl;
+      updatedRow = result.rows[0];
+    }
+
+    // Upload all new images
+    if (files.length > 0) {
+      const uploadedUrls = await Promise.all(files.map(f => uploadImage(f.buffer)));
+      for (const url of uploadedUrls) {
+        await pool.query(
+          'INSERT INTO experience_images (experience_id, image_url) VALUES ($1, $2)',
+          [id, url]
+        );
       }
-      return res.status(200).json({ data: result.rows[0] });
     }
 
-    if (req.file?.buffer) {
-      const imageUrl = await uploadImage(req.file.buffer);
-      await pool.query('INSERT INTO experience_images (experience_id, image_url) VALUES ($1, $2)', [id, imageUrl]);
-      return res.status(200).json({ data: { id, image_url: imageUrl } });
+    // Always return with full images array
+    const imagesResult = await pool.query(
+      'SELECT image_url FROM experience_images WHERE experience_id = $1 ORDER BY sort_order, created_at',
+      [id]
+    );
+    const images = imagesResult.rows.map(r => r.image_url);
+
+    if (updatedRow) {
+      updatedRow.images = images;
+      return res.status(200).json({ data: updatedRow });
     }
 
-    return res.status(400).json({ error: 'Nothing to update.' });
+    return res.status(200).json({ data: { id, images } });
   } catch (error) {
     console.error('updateExperience error:', error);
     return res.status(500).json({ error: 'Failed to update experience.' });
