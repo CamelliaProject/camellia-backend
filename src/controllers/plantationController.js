@@ -47,8 +47,8 @@ export async function publishPlantation(req, res) {
   const { id } = req.params;
   try {
     const { rows } = await pool.query(
-      `UPDATE plantations SET is_published = true, updated_at = now()
-       WHERE id = $1 RETURNING id, name, is_published`,
+      `UPDATE plantations SET is_disabled = false, updated_at = now()
+       WHERE id = $1 RETURNING id, name`,
       [id]
     );
     if (!rows.length) return res.status(404).json({ error: 'Plantation not found.' });
@@ -75,7 +75,17 @@ export async function getPlantationById(req, res) {
     );
 
     const experiencesResult = await pool.query(
-      'SELECT id, name, short_description, price_usd_adult, price_usd_child, price_lkr_adult, price_lkr_child, is_active FROM experiences WHERE plantation_id = $1 AND is_active = true ORDER BY created_at DESC',
+      `SELECT e.id, e.name, e.short_description, e.detailed_description, e.category, e.announcement,
+              e.price_usd_adult, e.price_usd_child, e.price_lkr_adult, e.price_lkr_child, e.is_active,
+              COALESCE(
+                json_agg(ei.image_url ORDER BY ei.sort_order, ei.created_at) FILTER (WHERE ei.image_url IS NOT NULL),
+                '[]'
+              ) AS images
+       FROM experiences e
+       LEFT JOIN experience_images ei ON ei.experience_id = e.id
+       WHERE e.plantation_id = $1 AND e.is_active = true
+       GROUP BY e.id
+       ORDER BY e.created_at DESC`,
       [id]
     );
 
@@ -279,6 +289,53 @@ export async function updatePlantation(req, res) {
   } catch (error) {
     console.error('updatePlantation error:', error);
     return res.status(500).json({ error: 'Failed to update plantation.' });
+  }
+}
+
+export async function addGalleryImages(req, res) {
+  const { id } = req.params;
+  if (!id) return res.status(400).json({ error: 'Missing plantation id parameter.' });
+
+  const files = req.files;
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: 'No image files provided.' });
+  }
+
+  try {
+    const uploadedUrls = await Promise.all(files.map((f) => uploadImage(f.buffer)));
+
+    if (uploadedUrls.length > 0) {
+      const placeholders = uploadedUrls.map((_, i) => `($1, $${i + 2})`).join(', ');
+      await pool.query(
+        `INSERT INTO plantation_gallery_images (plantation_id, image_url) VALUES ${placeholders}`,
+        [id, ...uploadedUrls]
+      );
+    }
+
+    return res.status(201).json({ data: uploadedUrls });
+  } catch (error) {
+    console.error('addGalleryImages error:', error);
+    return res.status(500).json({ error: 'Failed to upload gallery images.' });
+  }
+}
+
+export async function deleteGalleryImage(req, res) {
+  const { id } = req.params;
+  const { image_url } = req.body;
+
+  if (!id || !image_url) {
+    return res.status(400).json({ error: 'plantation id and image_url are required.' });
+  }
+
+  try {
+    await pool.query(
+      'DELETE FROM plantation_gallery_images WHERE plantation_id = $1 AND image_url = $2',
+      [id, image_url]
+    );
+    return res.status(200).json({ data: { deleted: true } });
+  } catch (error) {
+    console.error('deleteGalleryImage error:', error);
+    return res.status(500).json({ error: 'Failed to delete gallery image.' });
   }
 }
 

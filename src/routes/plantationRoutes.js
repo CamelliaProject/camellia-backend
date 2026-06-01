@@ -10,6 +10,8 @@ import {
   updatePlantation,
   deletePlantation,
   publishPlantation,
+  addGalleryImages,
+  deleteGalleryImage,
 } from '../controllers/plantationController.js';
 
 const upload = multer({ storage: multer.memoryStorage() });
@@ -27,6 +29,8 @@ const WRITE_ROLES = ['superadmin', 'plantationadmin'];
 router.post('/', checkRole(...WRITE_ROLES), upload.single('mainImage'), createPlantation);
 router.put('/:id', checkRole(...WRITE_ROLES), upload.single('mainImage'), updatePlantation);
 router.put('/:id/publish', checkRole('plantationadmin'), publishPlantation);
+router.post('/:id/gallery', checkRole(...WRITE_ROLES), upload.array('images', 20), addGalleryImages);
+router.delete('/:id/gallery', checkRole(...WRITE_ROLES), deleteGalleryImage);
 router.delete('/:id', checkRole('superadmin'), deletePlantation);
 
 export default router;

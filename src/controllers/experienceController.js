@@ -203,7 +203,8 @@ export async function deleteExperience(req, res) {
   }
 }
 export async function createExperienceSlot(req, res) {
-  const { experience_id, slot_date, slot_time, available_seats } = req.body;
+  const { experience_id, slot_date, slot_time, available_seats, capacity } = req.body;
+  const slotCapacity = capacity ?? available_seats;
 
   if (!experience_id || !slot_date || !slot_time) {
     return res.status(400).json({
@@ -217,7 +218,7 @@ export async function createExperienceSlot(req, res) {
         experience_id,
         slot_date,
         slot_time,
-        available_seats
+        capacity
       )
       VALUES ($1, $2, $3, $4)
       RETURNING *
@@ -227,7 +228,7 @@ export async function createExperienceSlot(req, res) {
       experience_id,
       slot_date,
       slot_time,
-      available_seats || 0
+      slotCapacity || 10
     ];
 
     const { rows } = await pool.query(query, values);
