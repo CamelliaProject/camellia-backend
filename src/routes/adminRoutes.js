@@ -5,6 +5,7 @@ import {
   updateBookingStatus,
   getPlantationReviews,
   addReviewReply,
+  getPlantationPayments,
 } from '../controllers/adminController.js';
 import { getAllPlantationsForAdmin } from '../controllers/plantationController.js';
 
@@ -15,6 +16,7 @@ router.get('/plantations', checkRole('superadmin'), getAllPlantationsForAdmin);
 
 router.get('/bookings/:plantationId', checkRole('superadmin', 'plantationadmin'), getPlantationBookings);
 router.put('/bookings/:plantationId/:bookingId', checkRole('superadmin', 'plantationadmin'), updateBookingStatus);
+router.get('/payments/:plantationId', checkRole('superadmin', 'plantationadmin'), getPlantationPayments);
 router.get('/reviews/:plantationId', checkRole('superadmin', 'plantationadmin'), getPlantationReviews);
 router.post('/reviews/:plantationId/:reviewId/reply', checkRole('superadmin', 'plantationadmin'), addReviewReply);
 

@@ -54,6 +54,44 @@ export async function updateBookingStatus(req, res) {
   }
 }
 
+export async function getPlantationPayments(req, res) {
+  const { plantationId } = req.params;
+  if (!plantationId) return res.status(400).json({ error: 'Missing plantation id parameter.' });
+
+  try {
+    const { rows } = await pool.query(
+      `SELECT b.id,
+              b.booking_reference,
+              b.tourist_full_name,
+              b.tourist_email,
+              b.total_price_usd,
+              b.total_price_lkr,
+              b.num_adults,
+              b.num_children,
+              b.status,
+              b.booking_date,
+              b.created_at,
+              COALESCE(
+                json_agg(e.name ORDER BY e.name) FILTER (WHERE e.name IS NOT NULL),
+                '[]'
+              ) AS experience_names
+       FROM bookings b
+       LEFT JOIN booking_experiences be ON be.booking_id = b.id
+       LEFT JOIN experiences e ON e.id = be.experience_id
+       WHERE b.plantation_id = $1
+         AND b.status <> 'cancelled'
+       GROUP BY b.id
+       ORDER BY b.created_at DESC`,
+      [plantationId]
+    );
+
+    return res.status(200).json({ data: rows });
+  } catch (error) {
+    console.error('getPlantationPayments error:', error);
+    return res.status(500).json({ error: 'Failed to fetch plantation payments.' });
+  }
+}
+
 export async function getPlantationReviews(req, res) {
   const { plantationId } = req.params;
   if (!plantationId) return res.status(400).json({ error: 'Missing plantation id parameter.' });
