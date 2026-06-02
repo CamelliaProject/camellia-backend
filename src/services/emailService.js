@@ -122,6 +122,70 @@ export async function sendApprovalCredentials(to, ownerName, plantationName, use
   });
 }
 
+export async function sendBookingCancellationEmail(to, touristName, booking, reason, contactEmail) {
+  if (!isEmailConfigured()) return;
+  const transporter = createTransporter();
+  const contact = contactEmail || process.env.CONTACT_EMAIL || 'support@camellia.com';
+  const bookingDate = booking.booking_date
+    ? new Date(booking.booking_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : '—';
+  const amountLine = booking.total_price_lkr
+    ? `Rs ${Number(booking.total_price_lkr).toLocaleString()} (LKR)`
+    : booking.total_price_usd
+    ? `$ ${Number(booking.total_price_usd).toLocaleString()} (USD)`
+    : null;
+
+  await transporter.sendMail({
+    from: `"Camellia Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: `Booking Cancelled — Ref: ${booking.booking_reference}`,
+    html: wrap(`
+      <h2 style="color:#1B4332;margin-top:0;">Your Booking Has Been Cancelled</h2>
+      <p>Dear <strong>${touristName}</strong>,</p>
+      <p>We regret to inform you that your booking has been cancelled by the plantation. Please see the details below.</p>
+
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:24px 0;">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;width:40%;">Booking Reference</td>
+            <td style="padding:6px 0;font-weight:700;color:#1B4332;">${booking.booking_reference}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;">Visit Date</td>
+            <td style="padding:6px 0;font-weight:600;color:#111827;">${bookingDate}</td>
+          </tr>
+          ${amountLine ? `
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;">Amount Paid</td>
+            <td style="padding:6px 0;font-weight:600;color:#111827;">${amountLine}</td>
+          </tr>` : ''}
+        </table>
+      </div>
+
+      <div style="background:#fef2f2;border-left:4px solid #ef4444;padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0 0 6px;color:#991b1b;font-size:13px;font-weight:600;">Reason for Cancellation</p>
+        <p style="margin:0;color:#7f1d1d;font-size:14px;">${reason}</p>
+      </div>
+
+      ${amountLine ? `
+      <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0;color:#166534;font-size:14px;">
+          <strong>Refund Notice:</strong> Your payment will be refunded in full within <strong>24 hours</strong>.
+          If you do not receive your refund within 24 hours, please contact us at
+          <a href="mailto:${contact}" style="color:#1B4332;">${contact}</a>.
+        </p>
+      </div>
+      ` : ''}
+
+      <p style="color:#6b7280;font-size:14px;">
+        For any questions or concerns, please contact us at
+        <a href="mailto:${contact}" style="color:#1B4332;">${contact}</a>.
+        We apologise for any inconvenience caused.
+      </p>
+    `),
+  });
+}
+
 export async function sendRejectionNotice(to, ownerName, plantationName, reason) {
   if (!isEmailConfigured()) return;
   const transporter = createTransporter();

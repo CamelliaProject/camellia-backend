@@ -1,4 +1,6 @@
 import pool from '../config/db.js';
+import { sendBookingCancellationEmail } from '../services/emailService.js';
+import { processRefund } from '../services/payhereService.js';
 
 export async function getPlantationBookings(req, res) {
   const { plantationId } = req.params;
@@ -6,7 +8,7 @@ export async function getPlantationBookings(req, res) {
 
   try {
     const { rows } = await pool.query(
-      `SELECT b.*,
+      `SELECT b.*, b.cancelled_by,
               u.username AS tourist_username,
               COALESCE(
                 json_agg(e.name ORDER BY e.name) FILTER (WHERE e.name IS NOT NULL),
@@ -31,20 +33,70 @@ export async function getPlantationBookings(req, res) {
 
 export async function updateBookingStatus(req, res) {
   const { bookingId } = req.params;
-  const { status } = req.body;
+  const { status, reason } = req.body;
 
   if (!bookingId || !status) {
     return res.status(400).json({ error: 'Booking id and status are required.' });
   }
 
   try {
+    // Fetch the existing booking first
+    const { rows: existing } = await pool.query('SELECT * FROM bookings WHERE id = $1', [bookingId]);
+    if (!existing.length) {
+      return res.status(404).json({ error: 'Booking not found.' });
+    }
+    const booking = existing[0];
+
+    // Enforce 7-day rule for admin cancellations
+    if (status === 'cancelled') {
+      if (!reason || !reason.trim()) {
+        return res.status(400).json({ error: 'A cancellation reason is required.' });
+      }
+      if (booking.booking_date) {
+        const bookingDay = new Date(booking.booking_date);
+        bookingDay.setHours(0, 0, 0, 0);
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const daysUntil = Math.round((bookingDay - today) / (1000 * 60 * 60 * 24));
+        if (daysUntil < 7) {
+          return res.status(400).json({
+            error: `Cancellations must be made at least 7 days before the booking date. This booking is ${daysUntil} day${daysUntil === 1 ? '' : 's'} away.`,
+          });
+        }
+      }
+    }
+
+    const cancelledBy = status === 'cancelled' ? 'admin' : null;
     const { rows } = await pool.query(
-      'UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 RETURNING *',
+      `UPDATE bookings
+       SET status = $1,
+           cancelled_by = CASE WHEN $1 = 'cancelled' THEN 'admin' ELSE cancelled_by END,
+           updated_at = now()
+       WHERE id = $2 RETURNING *`,
       [status, bookingId]
     );
 
-    if (!rows.length) {
-      return res.status(404).json({ error: 'Booking not found.' });
+    if (status === 'cancelled') {
+      const contactEmail = process.env.CONTACT_EMAIL || process.env.EMAIL_USER || 'support@camellia.com';
+
+      // Fire-and-forget: issue PayHere refund if a payment_id is stored
+      if (booking.payhere_payment_id) {
+        processRefund(
+          booking.payhere_payment_id,
+          `Booking ${booking.booking_reference} cancelled by plantation: ${reason.trim()}`
+        ).catch(err => console.error('PayHere refund error:', err.message));
+      }
+
+      // Fire-and-forget: send cancellation email to tourist
+      if (booking.tourist_email) {
+        sendBookingCancellationEmail(
+          booking.tourist_email,
+          booking.tourist_full_name || 'Valued Guest',
+          booking,
+          reason.trim(),
+          contactEmail
+        ).catch(err => console.error('Failed to send cancellation email:', err));
+      }
     }
 
     return res.status(200).json({ booking: rows[0] });
@@ -79,7 +131,7 @@ export async function getPlantationPayments(req, res) {
        LEFT JOIN booking_experiences be ON be.booking_id = b.id
        LEFT JOIN experiences e ON e.id = be.experience_id
        WHERE b.plantation_id = $1
-         AND b.status <> 'cancelled'
+         AND (b.status <> 'cancelled' OR b.cancelled_by = 'tourist')
        GROUP BY b.id
        ORDER BY b.created_at DESC`,
       [plantationId]

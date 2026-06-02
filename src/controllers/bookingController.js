@@ -207,8 +207,8 @@ export async function cancelBooking(req, res) {
     }
 
     const updateResult = await pool.query(
-      'UPDATE bookings SET status = $1, updated_at = now() WHERE id = $2 RETURNING *',
-      ['cancelled', id]
+      'UPDATE bookings SET status = $1, cancelled_by = $2, updated_at = now() WHERE id = $3 RETURNING *',
+      ['cancelled', 'tourist', id]
     );
 
     return res.status(200).json({ data: updateResult.rows[0] });
