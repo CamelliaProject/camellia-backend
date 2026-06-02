@@ -70,10 +70,10 @@ export async function updateBookingStatus(req, res) {
     const { rows } = await pool.query(
       `UPDATE bookings
        SET status = $1,
-           cancelled_by = CASE WHEN $1 = 'cancelled' THEN 'admin' ELSE cancelled_by END,
+           cancelled_by = COALESCE($3, cancelled_by),
            updated_at = now()
        WHERE id = $2 RETURNING *`,
-      [status, bookingId]
+      [status, bookingId, cancelledBy]
     );
 
     if (status === 'cancelled') {
