@@ -232,6 +232,26 @@ export async function deleteExperience(req, res) {
     return res.status(500).json({ error: 'Failed to delete experience.' });
   }
 }
+export async function deleteExperienceImage(req, res) {
+  const { id } = req.params;
+  const { image_url } = req.body;
+
+  if (!id || !image_url) {
+    return res.status(400).json({ error: 'experience id and image_url are required.' });
+  }
+
+  try {
+    await pool.query(
+      'DELETE FROM experience_images WHERE experience_id = $1 AND image_url = $2',
+      [id, image_url]
+    );
+    return res.status(200).json({ data: { deleted: true } });
+  } catch (error) {
+    console.error('deleteExperienceImage error:', error);
+    return res.status(500).json({ error: 'Failed to delete experience image.' });
+  }
+}
+
 export async function createExperienceSlot(req, res) {
   const { experience_id, slot_date, slot_time, available_seats, capacity } = req.body;
   const slotCapacity = capacity ?? available_seats;
