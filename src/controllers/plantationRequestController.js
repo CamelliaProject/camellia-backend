@@ -6,34 +6,13 @@ import {
   sendRejectionNotice,
   sendSubscriptionPaymentEmail,
 } from '../services/emailService.js';
-
-const SUBSCRIPTION_AMOUNTS = { starter: 24000, pro: 60000 };
-const SUBSCRIPTION_LABELS  = { starter: 'Starter Pack (LKR 24,000/year)', pro: 'Pro Pack (LKR 60,000/year)' };
-
-// ── Helpers ────────────────────────────────────────────────────────────────
+import { generatePassword } from '../utils/generators.js';
+import { SUBSCRIPTION_AMOUNTS, SUBSCRIPTION_LABELS } from '../constants/index.js';
 
 function generateUsername(plantationName) {
   const slug = plantationName.toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 6);
   const rand = Math.random().toString(36).slice(2, 6);
   return `${slug}_${rand}`;
-}
-
-function generatePassword() {
-  const upper   = 'ABCDEFGHJKMNPQRSTUVWXYZ';
-  const lower   = 'abcdefghjkmnpqrstuvwxyz';
-  const digits  = '23456789';
-  const special = '@#$!';
-  const pool    = upper + lower + digits + special;
-
-  const required = [
-    upper[Math.floor(Math.random() * upper.length)],
-    lower[Math.floor(Math.random() * lower.length)],
-    digits[Math.floor(Math.random() * digits.length)],
-    special[Math.floor(Math.random() * special.length)],
-  ];
-  const rest = Array.from({ length: 8 }, () => pool[Math.floor(Math.random() * pool.length)]);
-
-  return [...required, ...rest].sort(() => Math.random() - 0.5).join('');
 }
 
 // ── Controllers ────────────────────────────────────────────────────────────

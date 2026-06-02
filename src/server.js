@@ -9,12 +9,12 @@ import bookingRoutes from './routes/bookingRoutes.js';
 import reviewRoutes from './routes/reviewRoutes.js';
 import paymentRoutes from './routes/paymentRoutes.js';
 import userRoutes from './routes/userRoutes.js';
-import resourceRoutes from './routes/resourceRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import plantationRequestRoutes from './routes/plantationRequestRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import { startCronJobs } from './services/cronService.js';
 import contactRoutes from './routes/contactRoutes.js';
+import settingsRoutes from './routes/settingsRoutes.js';
 
 dotenv.config();
 
@@ -31,7 +31,7 @@ const adminLoginLimiter = rateLimit({
 });
 
 app.use(cors({
-    origin: 'http://localhost:5173',
+    origin: process.env.FRONTEND_URL || 'http://localhost:5173',
     credentials: true
 }));
 app.use(express.json());
@@ -42,10 +42,10 @@ app.use('/api/bookings', bookingRoutes);
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/payments', paymentRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/resources', resourceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/plantation-requests', plantationRequestRoutes);
 app.use('/api/contact', contactRoutes);
+app.use('/api/settings', settingsRoutes);
 app.use('/api/auth/admin-login', adminLoginLimiter);
 app.use('/api/auth', authRoutes);
 
@@ -59,7 +59,7 @@ app.get('/api/health', (req, res) => {
 // TEST DATABASE CONNECTION ON BOOT
 try {
     const res = await pool.query('SELECT NOW()');
-    console.log(`s Database connection verified! Current time from DB: ${res.rows[0].now}`);
+    console.log(`Database connection verified. Current time from DB: ${res.rows[0].now}`);
 } catch (err) {
     console.error(' Database connection error:', err.message);
 }

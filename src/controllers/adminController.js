@@ -77,7 +77,7 @@ export async function updateBookingStatus(req, res) {
     );
 
     if (status === 'cancelled') {
-      const contactEmail = process.env.CONTACT_EMAIL || process.env.EMAIL_USER || 'support@camellia.com';
+      const contactEmail = process.env.CONTACT_EMAIL || process.env.EMAIL_USER || 'camelliaceylonplatform@gmail.com';
 
       // Fire-and-forget: issue PayHere refund if a payment_id is stored
       if (booking.payhere_payment_id) {

@@ -1,21 +1,8 @@
 import pool from '../config/db.js';
-import crypto from 'crypto';
 import { createPaymentIntent as createStripePaymentIntent } from '../services/stripeService.js';
 import { generateHash, getCheckoutUrl, verifyNotify } from '../services/payhereService.js';
 import { sendBookingConfirmationEmail, sendApprovalCredentials } from '../services/emailService.js';
-
-function generatePassword() {
-  const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ', lower = 'abcdefghjkmnpqrstuvwxyz';
-  const digits = '23456789', special = '@#$!';
-  const all = upper + lower + digits + special;
-  const required = [upper, lower, digits, special].map(s => s[Math.floor(Math.random() * s.length)]);
-  const rest = Array.from({ length: 8 }, () => all[Math.floor(Math.random() * all.length)]);
-  return [...required, ...rest].sort(() => Math.random() - 0.5).join('');
-}
-
-function generateBookingReference() {
-  return `BK-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(4).toString('hex')}`;
-}
+import { generatePassword, generateBookingReference } from '../utils/generators.js';
 
 export async function createPaymentIntent(req, res) {
   try {
@@ -111,6 +98,7 @@ export async function initiatePayHere(req, res) {
       tourist_country,
       special_notes,
       experience_ids,
+      usd_to_lkr_rate,
       // PayHere-specific
       currency,     // 'LKR' | 'USD'
       amount,       // numeric total
@@ -138,13 +126,13 @@ export async function initiatePayHere(req, res) {
     const { rows } = await pool.query(
       `INSERT INTO bookings (
         booking_reference, plantation_id, tourist_id, booking_date,
-        num_adults, num_children, total_price_usd, total_price_lkr,
+        num_adults, num_children, total_price_usd, total_price_lkr, usd_to_lkr_rate,
         tourist_full_name, tourist_email, tourist_phone, tourist_country, special_notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
       [
         bookingReference, plantation_id, user.id, booking_date,
         num_adults || 1, num_children || 0,
-        total_price_usd || null, total_price_lkr || null,
+        total_price_usd || null, total_price_lkr || null, usd_to_lkr_rate || null,
         tourist_full_name, tourist_email,
         tourist_phone || null, tourist_country || null, special_notes || null,
       ]

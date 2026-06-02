@@ -173,10 +173,6 @@ export async function getPlantationReviews(req, res) {
   }
 }
 
-function mapFields(values, authors) {
-  return values.map((field) => field && field.toString().trim()).filter(Boolean);
-}
-
 export async function createPlantation(req, res) {
   try {
     const {

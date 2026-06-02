@@ -76,7 +76,7 @@ export async function sendSubmissionConfirmation(to, ownerName, plantationName) 
       </div>
       <p style="color:#6b7280;font-size:14px;">
         Questions? Email us at
-        <a href="mailto:support@camellia.com" style="color:#1B4332;">support@camellia.com</a>
+        <a href="mailto:camelliaceylonplatform@gmail.com" style="color:#1B4332;">camelliaceylonplatform@gmail.com</a>
       </p>
     `),
   });
@@ -125,7 +125,7 @@ export async function sendApprovalCredentials(to, ownerName, plantationName, use
 export async function sendBookingCancellationEmail(to, touristName, booking, reason, contactEmail) {
   if (!isEmailConfigured()) return;
   const transporter = createTransporter();
-  const contact = contactEmail || process.env.CONTACT_EMAIL || 'support@camellia.com';
+  const contact = contactEmail || process.env.CONTACT_EMAIL || 'camelliaceylonplatform@gmail.com';
   const bookingDate = booking.booking_date
     ? new Date(booking.booking_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : '—';
@@ -358,7 +358,7 @@ export async function sendRejectionNotice(to, ownerName, plantationName, reason)
       <p>You are welcome to address the issues above and resubmit your application.</p>
       <p style="color:#6b7280;font-size:14px;">
         Questions? Email us at
-        <a href="mailto:support@camellia.com" style="color:#1B4332;">support@camellia.com</a>
+        <a href="mailto:camelliaceylonplatform@gmail.com" style="color:#1B4332;">camelliaceylonplatform@gmail.com</a>
       </p>
     `),
   });

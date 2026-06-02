@@ -174,6 +174,7 @@ CREATE TABLE bookings (
     num_children INT DEFAULT 0,
     total_price_usd DECIMAL(10, 2),
     total_price_lkr DECIMAL(12, 2),
+    usd_to_lkr_rate DECIMAL(10, 4),
     status VARCHAR(50) NOT NULL DEFAULT 'upcoming' CHECK (status IN ('upcoming', 'completed', 'cancelled')),
     tourist_full_name VARCHAR(255),
     tourist_email VARCHAR(255),

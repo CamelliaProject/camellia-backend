@@ -1,9 +1,5 @@
 import pool from '../config/db.js';
-import crypto from 'crypto';
-
-function generateBookingReference() {
-  return `BK-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(4).toString('hex')}`;
-}
+import { generateBookingReference } from '../utils/generators.js';
 
 export async function createBooking(req, res) {
   try {

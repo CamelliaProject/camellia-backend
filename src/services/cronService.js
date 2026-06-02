@@ -1,7 +1,6 @@
 import pool from '../config/db.js';
 import { sendSubscriptionRenewalReminderEmail } from './emailService.js';
-
-const SUBSCRIPTION_LABELS = { starter: 'Starter Pack', pro: 'Pro Pack' };
+import { SUBSCRIPTION_LABELS } from '../constants/index.js';
 
 async function runSubscriptionReminderCheck() {
   console.log('[cron] Running subscription reminder check…');
