@@ -131,7 +131,7 @@ export async function getPlantationPayments(req, res) {
        LEFT JOIN booking_experiences be ON be.booking_id = b.id
        LEFT JOIN experiences e ON e.id = be.experience_id
        WHERE b.plantation_id = $1
-         AND (b.status <> 'cancelled' OR b.cancelled_by = 'tourist')
+         AND (b.status <> 'cancelled' OR b.cancelled_by IS NULL OR b.cancelled_by = 'tourist')
        GROUP BY b.id
        ORDER BY b.created_at DESC`,
       [plantationId]
