@@ -14,6 +14,7 @@ import adminRoutes from './routes/adminRoutes.js';
 import plantationRequestRoutes from './routes/plantationRequestRoutes.js';
 import authRoutes from './routes/authRoutes.js';
 import { startCronJobs } from './services/cronService.js';
+import contactRoutes from './routes/contactRoutes.js';
 
 dotenv.config();
 
@@ -44,6 +45,7 @@ app.use('/api/users', userRoutes);
 app.use('/api/resources', resourceRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/plantation-requests', plantationRequestRoutes);
+app.use('/api/contact', contactRoutes);
 app.use('/api/auth/admin-login', adminLoginLimiter);
 app.use('/api/auth', authRoutes);
 
