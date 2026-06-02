@@ -144,6 +144,61 @@ export async function getPlantationPayments(req, res) {
   }
 }
 
+export async function getSubscriptions(req, res) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT ps.*,
+             p.name AS plantation_name, p.email AS plantation_email, p.is_disabled,
+             u.name AS owner_name
+      FROM plantation_subscriptions ps
+      JOIN plantations p ON p.id = ps.plantation_id
+      LEFT JOIN users u ON u.plantation_id = ps.plantation_id AND u.role = 'plantationadmin'
+      ORDER BY ps.created_at DESC
+    `);
+    return res.status(200).json({ data: rows });
+  } catch (error) {
+    console.error('getSubscriptions error:', error);
+    return res.status(500).json({ error: 'Failed to fetch subscriptions.' });
+  }
+}
+
+export async function getSubscriptionEarnings(req, res) {
+  try {
+    const { rows } = await pool.query(`
+      SELECT
+        subscription_type,
+        COUNT(*) AS count,
+        SUM(amount) AS total
+      FROM plantation_subscriptions
+      WHERE status IN ('active', 'expired')
+      GROUP BY subscription_type
+    `);
+    const overall = await pool.query(
+      `SELECT COUNT(*) AS total_subscriptions, SUM(amount) AS total_earnings
+       FROM plantation_subscriptions WHERE status IN ('active','expired')`
+    );
+    return res.status(200).json({ byType: rows, overall: overall.rows[0] });
+  } catch (error) {
+    console.error('getSubscriptionEarnings error:', error);
+    return res.status(500).json({ error: 'Failed to fetch earnings.' });
+  }
+}
+
+export async function togglePlantationDisabled(req, res) {
+  const { plantationId } = req.params;
+  const { disabled } = req.body;
+  try {
+    await pool.query(
+      `UPDATE plantations SET is_disabled = $1, updated_at = now() WHERE id = $2`,
+      [!!disabled, plantationId]
+    );
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('togglePlantationDisabled error:', error);
+    return res.status(500).json({ error: 'Failed to update plantation status.' });
+  }
+}
+
 export async function getPlantationReviews(req, res) {
   const { plantationId } = req.params;
   if (!plantationId) return res.status(400).json({ error: 'Missing plantation id parameter.' });

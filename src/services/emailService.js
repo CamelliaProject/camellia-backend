@@ -186,6 +186,54 @@ export async function sendBookingCancellationEmail(to, touristName, booking, rea
   });
 }
 
+export async function sendSubscriptionPaymentEmail(to, ownerName, plantationName, plan, amount, paymentUrl) {
+  if (!isEmailConfigured()) return;
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: `"Camellia Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: `Action Required: Pay Subscription Fee — ${plantationName}`,
+    html: wrap(`
+      <h2 style="color:#1B4332;margin-top:0;">Your Registration Has Been Approved!</h2>
+      <p>Dear <strong>${ownerName}</strong>,</p>
+      <p>Great news! Your plantation <strong>${plantationName}</strong> has been reviewed and approved on the Camellia platform.</p>
+      <p>To activate your listing and receive your login credentials, please complete your subscription payment:</p>
+
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:24px 0;">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;width:40%;">Plan</td>
+            <td style="padding:6px 0;font-weight:700;color:#1B4332;">${plan}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;">Amount Due</td>
+            <td style="padding:6px 0;font-weight:700;color:#1B4332;">Rs ${Number(amount).toLocaleString()} / year</td>
+          </tr>
+        </table>
+      </div>
+
+      <div style="text-align:center;margin:32px 0;">
+        <a href="${paymentUrl}"
+           style="display:inline-block;background:#1B4332;color:#fff;font-weight:700;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;">
+          Pay Subscription Fee →
+        </a>
+      </div>
+
+      <div style="background:#fff7ed;border-left:4px solid #f97316;padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0;color:#c2410c;font-size:13px;">
+          Your plantation listing will go live and your login credentials will be sent to this email
+          <strong>immediately after payment is confirmed</strong>.
+        </p>
+      </div>
+
+      <p style="color:#6b7280;font-size:13px;">
+        If you have any questions, contact us at
+        <a href="mailto:${process.env.EMAIL_USER}" style="color:#1B4332;">${process.env.EMAIL_USER}</a>.
+      </p>
+    `),
+  });
+}
+
 export async function sendBookingConfirmationEmail(to, touristName, booking, experiences = []) {
   if (!isEmailConfigured()) return;
   const transporter = createTransporter();
@@ -246,6 +294,46 @@ export async function sendBookingConfirmationEmail(to, touristName, booking, exp
           contact us at <a href="mailto:${process.env.EMAIL_USER}" style="color:#1B4332;">${process.env.EMAIL_USER}</a>.
         </p>
       </div>
+    `),
+  });
+}
+
+export async function sendSubscriptionRenewalReminderEmail(to, ownerName, plantationName, plan, amount, endDate, daysLeft, renewalUrl) {
+  if (!isEmailConfigured()) return;
+  const transporter = createTransporter();
+  const urgencyColor = daysLeft <= 1 ? '#ef4444' : daysLeft <= 7 ? '#f97316' : '#f59e0b';
+  const urgencyLabel = daysLeft <= 1 ? 'EXPIRES TOMORROW' : daysLeft <= 7 ? `${daysLeft} DAYS LEFT` : `${daysLeft} DAYS LEFT`;
+  await transporter.sendMail({
+    from: `"Camellia Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: `Subscription Renewal Reminder — ${plantationName} (${urgencyLabel})`,
+    html: wrap(`
+      <h2 style="color:#1B4332;margin-top:0;">Subscription Renewal Reminder</h2>
+      <p>Dear <strong>${ownerName}</strong>,</p>
+      <p>Your Camellia subscription for <strong>${plantationName}</strong> is expiring soon.</p>
+
+      <div style="background:#fef2f2;border-left:4px solid ${urgencyColor};padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0;font-size:18px;font-weight:700;color:${urgencyColor};">${urgencyLabel}</p>
+        <p style="margin:4px 0 0;color:#7f1d1d;font-size:13px;">Expiry date: ${endDate}</p>
+      </div>
+
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:24px 0;">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+          <tr><td style="padding:6px 0;color:#6b7280;width:40%;">Plan</td><td style="padding:6px 0;font-weight:700;color:#1B4332;">${plan}</td></tr>
+          <tr><td style="padding:6px 0;color:#6b7280;">Renewal Amount</td><td style="padding:6px 0;font-weight:700;color:#1B4332;">Rs ${Number(amount).toLocaleString()} / year</td></tr>
+        </table>
+      </div>
+
+      <div style="text-align:center;margin:32px 0;">
+        <a href="${renewalUrl}" style="display:inline-block;background:#1B4332;color:#fff;font-weight:700;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;">
+          Renew Subscription Now →
+        </a>
+      </div>
+
+      <p style="color:#6b7280;font-size:13px;">
+        If you do not renew before the expiry date, your plantation listing will be deactivated.
+        Contact us at <a href="mailto:${process.env.EMAIL_USER}" style="color:#1B4332;">${process.env.EMAIL_USER}</a> for assistance.
+      </p>
     `),
   });
 }

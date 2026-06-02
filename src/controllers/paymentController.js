@@ -2,7 +2,16 @@ import pool from '../config/db.js';
 import crypto from 'crypto';
 import { createPaymentIntent as createStripePaymentIntent } from '../services/stripeService.js';
 import { generateHash, getCheckoutUrl, verifyNotify } from '../services/payhereService.js';
-import { sendBookingConfirmationEmail } from '../services/emailService.js';
+import { sendBookingConfirmationEmail, sendApprovalCredentials } from '../services/emailService.js';
+
+function generatePassword() {
+  const upper = 'ABCDEFGHJKMNPQRSTUVWXYZ', lower = 'abcdefghjkmnpqrstuvwxyz';
+  const digits = '23456789', special = '@#$!';
+  const all = upper + lower + digits + special;
+  const required = [upper, lower, digits, special].map(s => s[Math.floor(Math.random() * s.length)]);
+  const rest = Array.from({ length: 8 }, () => all[Math.floor(Math.random() * all.length)]);
+  return [...required, ...rest].sort(() => Math.random() - 0.5).join('');
+}
 
 function generateBookingReference() {
   return `BK-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(4).toString('hex')}`;
@@ -259,6 +268,224 @@ export async function savePayHerePayment(req, res) {
   } catch (error) {
     console.error('savePayHerePayment error:', error);
     return res.status(500).json({ error: 'Failed to save payment id.' });
+  }
+}
+
+// ── Subscription: initiate PayHere checkout for plantation subscription fee ──
+export async function initiateSubscription(req, res) {
+  try {
+    const { token } = req.body;
+    if (!token) return res.status(400).json({ error: 'token is required.' });
+
+    const { rows } = await pool.query(
+      'SELECT * FROM plantation_requests WHERE id = $1',
+      [token]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Request not found.' });
+    const request = rows[0];
+    if (request.subscription_payment_status === 'paid') {
+      return res.status(400).json({ error: 'Subscription already paid.' });
+    }
+
+    const merchantId     = process.env.PAYHERE_MERCHANT_ID;
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
+    const frontendUrl    = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const backendUrl     = process.env.BACKEND_URL  || 'http://localhost:5000';
+    const amount         = request.subscription_amount || 24000;
+    const orderId        = `SUB-${token}`;
+
+    const hash = generateHash(merchantId, orderId, amount, 'LKR', merchantSecret);
+
+    return res.status(200).json({
+      checkout_url: getCheckoutUrl(),
+      params: {
+        merchant_id:  merchantId,
+        return_url:   `${frontendUrl}/subscription-payment-return?token=${token}`,
+        cancel_url:   `${frontendUrl}/subscription-payment?token=${token}&cancelled=true`,
+        notify_url:   `${backendUrl}/api/payments/subscription/notify`,
+        order_id:     orderId,
+        items:        `Camellia Platform Subscription`,
+        currency:     'LKR',
+        amount:       Number(amount).toFixed(2),
+        first_name:   request.owner_name.split(' ')[0],
+        last_name:    request.owner_name.split(' ').slice(1).join(' ') || '-',
+        email:        request.email,
+        phone:        request.telephone || '',
+        address:      request.address || '',
+        city:         'Sri Lanka',
+        country:      'Sri Lanka',
+        hash,
+      },
+    });
+  } catch (error) {
+    console.error('initiateSubscription error:', error);
+    return res.status(500).json({ error: 'Failed to initiate subscription payment.' });
+  }
+}
+
+// ── Subscription: called by frontend after PayHere return (localhost fallback) ─
+export async function confirmSubscriptionPayment(req, res) {
+  try {
+    const { token, payment_id } = req.body;
+    if (!token) return res.status(400).json({ error: 'token is required.' });
+
+    const { rows } = await pool.query(
+      'SELECT * FROM plantation_requests WHERE id = $1', [token]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Request not found.' });
+    const request = rows[0];
+    if (request.subscription_payment_status === 'paid') {
+      return res.status(200).json({ ok: true, alreadyPaid: true });
+    }
+    if (!request.linked_plantation_id || !request.linked_admin_user_id) {
+      return res.status(400).json({ error: 'Plantation not linked to this request.' });
+    }
+
+    // Generate fresh credentials
+    const newPassword = generatePassword();
+
+    // Activate plantation and update user password
+    await pool.query(
+      `UPDATE plantations SET is_published = true, updated_at = now() WHERE id = $1`,
+      [request.linked_plantation_id]
+    );
+    await pool.query(
+      `UPDATE users SET password_hash = $1, updated_at = now() WHERE id = $2`,
+      [newPassword, request.linked_admin_user_id]
+    );
+    await pool.query(
+      `UPDATE plantation_requests
+       SET subscription_payment_status = 'paid', updated_at = now()
+       WHERE id = $1`,
+      [token]
+    );
+
+    // Get username for credentials email
+    const { rows: userRows } = await pool.query(
+      'SELECT username FROM users WHERE id = $1', [request.linked_admin_user_id]
+    );
+    const username = userRows[0]?.username || '';
+
+    // Create subscription record (1 year)
+    const startDate = new Date();
+    const endDate   = new Date();
+    endDate.setFullYear(endDate.getFullYear() + 1);
+    await pool.query(
+      `INSERT INTO plantation_subscriptions
+         (plantation_id, plantation_request_id, subscription_type, amount, start_date, end_date, status, payhere_payment_id)
+       VALUES ($1,$2,$3,$4,$5,$6,'active',$7)`,
+      [request.linked_plantation_id, token,
+       request.subscription_type || 'starter', request.subscription_amount || 24000,
+       startDate.toISOString().slice(0,10), endDate.toISOString().slice(0,10),
+       payment_id || null]
+    );
+
+    // Send credentials email
+    sendApprovalCredentials(
+      request.email, request.owner_name, request.name, username, newPassword
+    ).catch(err => console.error('Credentials email failed:', err.message));
+
+    return res.status(200).json({ ok: true });
+  } catch (error) {
+    console.error('confirmSubscriptionPayment error:', error);
+    return res.status(500).json({ error: 'Failed to confirm subscription payment.' });
+  }
+}
+
+// ── Subscription renewal: initiate PayHere for renewal ───────────────────────
+export async function initiateSubscriptionRenewal(req, res) {
+  try {
+    const { subscription_id } = req.body;
+    if (!subscription_id) return res.status(400).json({ error: 'subscription_id is required.' });
+
+    const { rows } = await pool.query(
+      `SELECT ps.*, p.name AS plantation_name, p.email AS plantation_email,
+              u.name AS owner_name, u.id AS admin_user_id
+       FROM plantation_subscriptions ps
+       JOIN plantations p ON p.id = ps.plantation_id
+       LEFT JOIN users u ON u.plantation_id = ps.plantation_id AND u.role = 'plantationadmin'
+       WHERE ps.id = $1`,
+      [subscription_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Subscription not found.' });
+    const sub = rows[0];
+
+    const merchantId     = process.env.PAYHERE_MERCHANT_ID;
+    const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
+    const frontendUrl    = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const backendUrl     = process.env.BACKEND_URL  || 'http://localhost:5000';
+    const amount         = sub.amount;
+    const orderId        = `RENEW-${subscription_id}`;
+
+    const hash = generateHash(merchantId, orderId, amount, 'LKR', merchantSecret);
+
+    return res.status(200).json({
+      checkout_url: getCheckoutUrl(),
+      plantation_name: sub.plantation_name,
+      subscription_type: sub.subscription_type,
+      amount,
+      end_date: sub.end_date,
+      params: {
+        merchant_id:  merchantId,
+        return_url:   `${frontendUrl}/subscription-renew-return?sub=${subscription_id}`,
+        cancel_url:   `${frontendUrl}/subscription-renew?sub=${subscription_id}&cancelled=true`,
+        notify_url:   `${backendUrl}/api/payments/subscription-renew/notify`,
+        order_id:     orderId,
+        items:        'Camellia Subscription Renewal',
+        currency:     'LKR',
+        amount:       Number(amount).toFixed(2),
+        first_name:   (sub.owner_name || 'Admin').split(' ')[0],
+        last_name:    (sub.owner_name || 'Admin').split(' ').slice(1).join(' ') || '-',
+        email:        sub.plantation_email,
+        phone:        '',
+        address:      '',
+        city:         'Sri Lanka',
+        country:      'Sri Lanka',
+        hash,
+      },
+    });
+  } catch (error) {
+    console.error('initiateSubscriptionRenewal error:', error);
+    return res.status(500).json({ error: 'Failed to initiate renewal payment.' });
+  }
+}
+
+// ── Subscription renewal: confirm after PayHere return ────────────────────────
+export async function confirmSubscriptionRenewal(req, res) {
+  try {
+    const { subscription_id, payment_id } = req.body;
+    if (!subscription_id) return res.status(400).json({ error: 'subscription_id is required.' });
+
+    const { rows } = await pool.query(
+      'SELECT * FROM plantation_subscriptions WHERE id = $1', [subscription_id]
+    );
+    if (!rows.length) return res.status(404).json({ error: 'Subscription not found.' });
+    const sub = rows[0];
+
+    // Extend end_date by 1 year from current end_date (or today if already expired)
+    const base    = new Date(sub.end_date) > new Date() ? new Date(sub.end_date) : new Date();
+    const newEnd  = new Date(base);
+    newEnd.setFullYear(newEnd.getFullYear() + 1);
+
+    await pool.query(
+      `UPDATE plantation_subscriptions
+       SET end_date = $1, status = 'active', payhere_payment_id = COALESCE($2, payhere_payment_id),
+           reminder_1month_sent = false, reminder_1week_sent = false, reminder_1day_sent = false,
+           updated_at = now()
+       WHERE id = $3`,
+      [newEnd.toISOString().slice(0,10), payment_id || null, subscription_id]
+    );
+
+    // Re-enable plantation if it was disabled
+    await pool.query(
+      `UPDATE plantations SET is_disabled = false, updated_at = now() WHERE id = $1`,
+      [sub.plantation_id]
+    );
+
+    return res.status(200).json({ ok: true, new_end_date: newEnd.toISOString().slice(0,10) });
+  } catch (error) {
+    console.error('confirmSubscriptionRenewal error:', error);
+    return res.status(500).json({ error: 'Failed to confirm renewal.' });
   }
 }
 

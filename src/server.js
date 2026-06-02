@@ -13,6 +13,7 @@ import resourceRoutes from './routes/resourceRoutes.js';
 import adminRoutes from './routes/adminRoutes.js';
 import plantationRequestRoutes from './routes/plantationRequestRoutes.js';
 import authRoutes from './routes/authRoutes.js';
+import { startCronJobs } from './services/cronService.js';
 
 dotenv.config();
 
@@ -63,4 +64,5 @@ try {
 
 app.listen(PORT, () => {
     console.log(`Server is running on port ${PORT}`);
+    startCronJobs();
 });

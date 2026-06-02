@@ -4,7 +4,11 @@ import {
   sendSubmissionConfirmation,
   sendApprovalCredentials,
   sendRejectionNotice,
+  sendSubscriptionPaymentEmail,
 } from '../services/emailService.js';
+
+const SUBSCRIPTION_AMOUNTS = { starter: 24000, pro: 60000 };
+const SUBSCRIPTION_LABELS  = { starter: 'Starter Pack (LKR 24,000/year)', pro: 'Pro Pack (LKR 60,000/year)' };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -180,19 +184,30 @@ export async function approvePlantationRequest(req, res) {
       [adminUser.id, requestId]
     );
 
-    await client.query('COMMIT');
+    const subscriptionAmount = SUBSCRIPTION_AMOUNTS[request.subscription_type] || SUBSCRIPTION_AMOUNTS.starter;
 
-    // Fire-and-forget credentials email
-    sendApprovalCredentials(request.email, request.owner_name, request.name, username, password).catch(err =>
-      console.error('Approval email failed:', err.message)
+    // Store linked IDs and subscription amount; mark payment as pending
+    await client.query(
+      `UPDATE plantation_requests
+       SET linked_plantation_id = $1, linked_admin_user_id = $2,
+           subscription_amount = $3, subscription_payment_status = 'pending_payment',
+           updated_at = now()
+       WHERE id = $4`,
+      [plantation.id, adminUser.id, subscriptionAmount, requestId]
     );
 
-    return res.status(200).json({
-      data: {
-        plantation,
-        adminUser: { ...adminUser, plainPassword: password },
-      },
-    });
+    await client.query('COMMIT');
+
+    // Send payment email (credentials come after payment)
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const paymentUrl  = `${frontendUrl}/subscription-payment?token=${requestId}`;
+    sendSubscriptionPaymentEmail(
+      request.email, request.owner_name, request.name,
+      SUBSCRIPTION_LABELS[request.subscription_type] || 'Starter Pack',
+      subscriptionAmount, paymentUrl
+    ).catch(err => console.error('Subscription payment email failed:', err.message));
+
+    return res.status(200).json({ data: { plantation, adminUser } });
   } catch (error) {
     await client.query('ROLLBACK').catch(() => {});
     console.error('approvePlantationRequest error:', error);
