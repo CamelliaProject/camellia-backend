@@ -11,7 +11,6 @@ export async function createBooking(req, res) {
     const {
       plantation_id,
       booking_date,
-      booking_time,
       num_adults,
       num_children,
       total_price_usd,
@@ -24,7 +23,7 @@ export async function createBooking(req, res) {
       experience_ids,
     } = req.body;
 
-    if (!plantation_id || !booking_date || !booking_time || !tourist_full_name || !tourist_email) {
+    if (!plantation_id || !booking_date || !tourist_full_name || !tourist_email) {
       return res.status(400).json({ error: 'Missing required booking fields.' });
     }
 
@@ -35,7 +34,6 @@ export async function createBooking(req, res) {
         plantation_id,
         tourist_id,
         booking_date,
-        booking_time,
         num_adults,
         num_children,
         total_price_usd,
@@ -45,7 +43,7 @@ export async function createBooking(req, res) {
         tourist_phone,
         tourist_country,
         special_notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
       RETURNING *
     `;
 
@@ -54,7 +52,6 @@ export async function createBooking(req, res) {
       plantation_id,
       user.id,
       booking_date,
-      booking_time,
       num_adults || 1,
       num_children || 0,
       total_price_usd || null,
