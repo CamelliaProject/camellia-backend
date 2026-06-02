@@ -2,6 +2,7 @@ import pool from '../config/db.js';
 import crypto from 'crypto';
 import { createPaymentIntent as createStripePaymentIntent } from '../services/stripeService.js';
 import { generateHash, getCheckoutUrl, verifyNotify } from '../services/payhereService.js';
+import { sendBookingConfirmationEmail } from '../services/emailService.js';
 
 function generateBookingReference() {
   return `BK-${Date.now().toString(36).toUpperCase()}-${crypto.randomBytes(4).toString('hex')}`;
@@ -229,12 +230,30 @@ export async function savePayHerePayment(req, res) {
     }
 
     // Only update if this booking belongs to the authenticated tourist
-    await pool.query(
+    const { rows: updated } = await pool.query(
       `UPDATE bookings
        SET payhere_payment_id = $1, updated_at = now()
-       WHERE booking_reference = $2 AND tourist_id = $3`,
+       WHERE booking_reference = $2 AND tourist_id = $3
+       RETURNING *`,
       [payment_id, booking_reference, user.id]
     );
+
+    // Send confirmation email fire-and-forget
+    if (updated.length && updated[0].tourist_email) {
+      const booking = updated[0];
+      const { rows: expRows } = await pool.query(
+        `SELECT e.name FROM booking_experiences be
+         JOIN experiences e ON e.id = be.experience_id
+         WHERE be.booking_id = $1`,
+        [booking.id]
+      );
+      sendBookingConfirmationEmail(
+        booking.tourist_email,
+        booking.tourist_full_name || 'Valued Guest',
+        booking,
+        expRows.map(r => r.name)
+      ).catch(err => console.error('Booking confirmation email failed:', err.message));
+    }
 
     return res.status(200).json({ ok: true });
   } catch (error) {

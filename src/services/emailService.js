@@ -186,6 +186,70 @@ export async function sendBookingCancellationEmail(to, touristName, booking, rea
   });
 }
 
+export async function sendBookingConfirmationEmail(to, touristName, booking, experiences = []) {
+  if (!isEmailConfigured()) return;
+  const transporter = createTransporter();
+  const bookingDate = booking.booking_date
+    ? new Date(booking.booking_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
+    : '—';
+  const amountLine = booking.total_price_lkr
+    ? `Rs ${Number(booking.total_price_lkr).toLocaleString()} (LKR)`
+    : booking.total_price_usd
+    ? `$ ${Number(booking.total_price_usd).toLocaleString()} (USD)`
+    : null;
+  const expList = experiences.length
+    ? `<ul style="margin:8px 0 0;padding-left:20px;color:#1B4332;">${experiences.map(e => `<li style="margin-bottom:4px;">${e}</li>`).join('')}</ul>`
+    : '<p style="margin:4px 0 0;color:#6b7280;">No experiences selected</p>';
+
+  await transporter.sendMail({
+    from: `"Camellia Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: `Booking Confirmed — Ref: ${booking.booking_reference}`,
+    html: wrap(`
+      <h2 style="color:#1B4332;margin-top:0;">Booking Confirmed!</h2>
+      <p>Dear <strong>${touristName}</strong>,</p>
+      <p>Your plantation experience booking has been confirmed. We look forward to welcoming you!</p>
+
+      <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:20px;margin:24px 0;">
+        <table style="width:100%;border-collapse:collapse;font-family:Arial,sans-serif;font-size:14px;">
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;width:40%;">Booking Reference</td>
+            <td style="padding:6px 0;font-weight:700;color:#1B4332;">${booking.booking_reference}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;">Visit Date</td>
+            <td style="padding:6px 0;font-weight:600;color:#111827;">${bookingDate}</td>
+          </tr>
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;">Guests</td>
+            <td style="padding:6px 0;color:#111827;">
+              ${booking.num_adults || 1} adult${(booking.num_adults || 1) !== 1 ? 's' : ''}
+              ${booking.num_children > 0 ? `, ${booking.num_children} child${booking.num_children !== 1 ? 'ren' : ''}` : ''}
+            </td>
+          </tr>
+          ${amountLine ? `
+          <tr>
+            <td style="padding:6px 0;color:#6b7280;">Total Paid</td>
+            <td style="padding:6px 0;font-weight:700;color:#1B4332;">${amountLine}</td>
+          </tr>` : ''}
+        </table>
+      </div>
+
+      <div style="margin:24px 0;">
+        <p style="margin:0 0 4px;font-weight:600;color:#1B4332;font-size:14px;">Experiences Booked</p>
+        ${expList}
+      </div>
+
+      <div style="background:#f0fdf4;border-left:4px solid #22c55e;padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0;color:#166534;font-size:14px;">
+          Please keep your booking reference handy when you visit. If you have any questions,
+          contact us at <a href="mailto:${process.env.EMAIL_USER}" style="color:#1B4332;">${process.env.EMAIL_USER}</a>.
+        </p>
+      </div>
+    `),
+  });
+}
+
 export async function sendRejectionNotice(to, ownerName, plantationName, reason) {
   if (!isEmailConfigured()) return;
   const transporter = createTransporter();
