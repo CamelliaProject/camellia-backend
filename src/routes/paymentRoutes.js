@@ -1,7 +1,6 @@
 import express from 'express';
 import { authenticate, checkRole } from '../middleware/authMiddleware.js';
 import {
-  createPaymentIntent,
   getPayments,
   updatePaymentStatus,
   initiatePayHere,
@@ -30,7 +29,6 @@ router.use(authenticate);
 router.post('/payhere/initiate', initiatePayHere);
 router.post('/payhere/save-payment', savePayHerePayment);
 
-router.post('/', createPaymentIntent);
 router.get('/', getPayments);
 router.patch('/:id/status', checkRole('superadmin', 'plantationadmin'), updatePaymentStatus);
 

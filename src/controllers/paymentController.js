@@ -1,55 +1,8 @@
 import pool from '../config/db.js';
-import { createPaymentIntent as createStripePaymentIntent } from '../services/stripeService.js';
 import { generateHash, getCheckoutUrl, verifyNotify } from '../services/payhereService.js';
 import { sendBookingConfirmationEmail, sendApprovalCredentials } from '../services/emailService.js';
 import { generatePassword, generateBookingReference } from '../utils/generators.js';
 
-export async function createPaymentIntent(req, res) {
-  try {
-    const user = req.user;
-    const { booking_id, plantation_id, amount, currency, payment_method } = req.body;
-
-    if (!booking_id || !plantation_id || !amount || !currency) {
-      return res.status(400).json({ error: 'booking_id, plantation_id, amount, and currency are required.' });
-    }
-
-    const paymentReference = `PAY-${Date.now().toString(36).toUpperCase()}`;
-    const paymentIntent = await createStripePaymentIntent({ amount, currency, metadata: { booking_id, plantation_id } });
-
-    const insertQuery = `
-      INSERT INTO payments (
-        payment_reference,
-        booking_id,
-        plantation_id,
-        amount,
-        currency,
-        status,
-        payment_method,
-        transaction_id,
-        payment_date
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-      RETURNING *
-    `;
-
-    const values = [
-      paymentReference,
-      booking_id,
-      plantation_id,
-      amount,
-      currency,
-      'pending',
-      payment_method || 'card',
-      paymentIntent.id,
-      null,
-    ];
-
-    const { rows } = await pool.query(insertQuery, values);
-    return res.status(201).json({ data: rows[0], client_secret: paymentIntent.client_secret });
-  } catch (error) {
-    console.error('createPaymentIntent error:', error);
-    return res.status(500).json({ error: 'Failed to create payment intent.' });
-  }
-}
 
 export async function getPayments(req, res) {
   try {

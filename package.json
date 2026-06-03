@@ -16,8 +16,6 @@
     "express",
     "postgresql",
     "firebase",
-    "stripe",
-    "aws",
     "camellia"
   ],
   "author": "",
@@ -28,7 +26,6 @@
   },
   "homepage": "https://github.com/CamelliaProject/camellia-backend#readme",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.0.0",
     "cloudinary": "^2.10.0",
     "cors": "^2.8.6",
     "dotenv": "^16.6.1",
@@ -38,8 +35,7 @@
     "jsonwebtoken": "^9.0.3",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.10",
-    "pg": "^8.20.0",
-    "stripe": "^12.0.0"
+    "pg": "^8.20.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.14"

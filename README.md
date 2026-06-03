@@ -44,8 +44,7 @@ src/
 │   ├── emailService.js          # Transactional email templates
 │   ├── firebaseAdmin.js         # Firebase Admin initialisation
 │   ├── payhereService.js        # PayHere payment helpers
-│   ├── storageService.js        # Cloudinary upload helper
-│   └── stripeService.js         # Stripe helpers
+│   └── storageService.js        # Cloudinary upload helper
 ├── db/
 │   ├── schema.sql               # Full database schema
 │   └── seed.js                  # Super admin seed script

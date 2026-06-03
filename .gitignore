@@ -1,19 +1,19 @@
 node_modules/
-.env
 dist/
 coverage/
+
+# Environment & secrets
+.env
+firebase-service-account.json
+
+# One-time seed script — reads super admin credentials from .env
+src/db/seed.js
+
+# Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# OS
 .DS_Store
-# Secrets and configurations
-firebase-service-account.json
-.env
-
-# One-time seed script contains credentials — keep off GitHub
-src/db/seed.js
-
-# Dependency folders
-node_modules/
-dist/
