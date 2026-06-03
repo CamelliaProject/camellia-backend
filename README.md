@@ -1,6 +1,6 @@
 # Camellia Ceylon Platform — Backend
 
-REST API for the Camellia Ceylon Platform. Handles plantation management, tourist bookings, payments, reviews, and user authentication.
+REST API for the Camellia Ceylon Platform. Handles plantation management, tourist bookings, payments, reviews, and authentication.
 
 ---
 
@@ -13,9 +13,21 @@ REST API for the Camellia Ceylon Platform. Handles plantation management, touris
 | Database | PostgreSQL |
 | Authentication | Firebase Admin SDK |
 | Image Storage | Cloudinary |
-| Payments | PayHere (sandbox + live) |
+| Payments | PayHere |
 | Email | Nodemailer (Gmail) |
 | Scheduling | node-cron |
+
+---
+
+## Features
+
+- Plantation registration, approval, and management
+- Tourist booking system with experience selection
+- PayHere payment integration (booking & subscription payments)
+- Review and reply system with image uploads
+- Role-based access control (Tourist, Plantation Admin, Super Admin)
+- Subscription management with automated renewal reminders
+- Transactional emails for bookings, credentials, and notifications
 
 ---
 
@@ -23,63 +35,45 @@ REST API for the Camellia Ceylon Platform. Handles plantation management, touris
 
 ```
 src/
-├── config/
-│   └── db.js                    # PostgreSQL connection pool
-├── controllers/                 # Route handler logic
-│   ├── adminController.js
-│   ├── authController.js
-│   ├── bookingController.js
-│   ├── contactController.js
-│   ├── experienceController.js
-│   ├── paymentController.js
-│   ├── plantationController.js
-│   ├── plantationRequestController.js
-│   ├── reviewController.js
-│   └── userController.js
-├── middleware/
-│   └── authMiddleware.js        # Firebase token verification + role check
-├── routes/                      # Express routers
-├── services/
-│   ├── cronService.js           # Scheduled background jobs
-│   ├── emailService.js          # Transactional email templates
-│   ├── firebaseAdmin.js         # Firebase Admin initialisation
-│   ├── payhereService.js        # PayHere payment helpers
-│   └── storageService.js        # Cloudinary upload helper
-├── db/
-│   ├── schema.sql               # Full database schema
-│   └── seed.js                  # Super admin seed script
-└── server.js                    # App entry point
+├── config/         # Database connection
+├── controllers/    # Route handler logic
+├── middleware/     # Authentication & role-based access
+├── routes/         # API route definitions
+├── services/       # External integrations (Firebase, Cloudinary, PayHere, email, cron)
+├── utils/          # Helper functions
+├── db/             # Database schema and seed script
+└── server.js       # Application entry point
 ```
 
 ---
 
-## API Routes
+## API Overview
 
-| Prefix | Description | Auth |
-|--------|-------------|------|
-| `GET /api/health` | Server health check | Public |
-| `/api/auth` | Admin login, password change | Mixed |
-| `/api/users` | Firebase user sync | Public |
-| `/api/plantations` | Browse & manage plantations | Mixed |
-| `/api/experiences` | Plantation experiences & time slots | Protected |
-| `/api/bookings` | Create & manage bookings | Protected |
-| `/api/reviews` | Submit & view reviews | Mixed |
-| `/api/payments` | PayHere payment initiation & confirmation | Protected |
-| `/api/plantation-requests` | Apply & approve plantation registrations | Mixed |
-| `/api/admin` | Super admin management | Super Admin |
-| `/api/contact` | Contact form submissions | Protected |
+| Prefix | Description |
+|--------|-------------|
+| `/api/auth` | Admin login, password management |
+| `/api/users` | User sync |
+| `/api/plantations` | Browse and manage plantations |
+| `/api/experiences` | Plantation experiences and time slots |
+| `/api/bookings` | Create and manage bookings |
+| `/api/reviews` | Submit and view reviews |
+| `/api/payments` | PayHere payment and subscription flows |
+| `/api/plantation-requests` | Plantation registration requests |
+| `/api/admin` | Super admin management |
+| `/api/contact` | Contact form submissions |
+| `/api/settings` | App settings (exchange rate) |
 
 ---
 
 ## Environment Variables
 
-Create a `.env` file in the project root:
+Create a `.env` file in the project root with the following keys:
 
 ```env
 # PostgreSQL
-DATABASE_URL=postgresql://postgres:<password>@localhost:5432/camelliadb
+DATABASE_URL=
 
-# Firebase Admin
+# Firebase Admin SDK
 FIREBASE_PROJECT_ID=
 FIREBASE_CLIENT_EMAIL=
 FIREBASE_PRIVATE_KEY=
@@ -90,22 +84,22 @@ CLOUDINARY_API_KEY=
 CLOUDINARY_API_SECRET=
 
 # PayHere
-PAYHERE_SANDBOX=true
+PAYHERE_SANDBOX=
 PAYHERE_MERCHANT_ID=
 PAYHERE_MERCHANT_SECRET=
 PAYHERE_APP_ID=
 PAYHERE_APP_SECRET=
 
-# Email (Gmail)
-EMAIL_USER=camelliaceylonplatform@gmail.com
+# Email
+EMAIL_USER=
 EMAIL_PASS=
 
 # App
-PORT=5000
-FRONTEND_URL=http://localhost:5173
-BACKEND_URL=http://localhost:5000
+PORT=
+FRONTEND_URL=
+BACKEND_URL=
 
-# Super Admin seed (used by src/db/seed.js only)
+# Super Admin Seed
 SUPER_ADMIN_USERNAME=
 SUPER_ADMIN_PASSWORD=
 SUPER_ADMIN_NAME=
@@ -120,7 +114,7 @@ SUPER_ADMIN_EMAIL=
 # Install dependencies
 npm install
 
-# Start development server with auto-reload (http://localhost:5000)
+# Start development server
 npm run dev
 
 # Start production server
@@ -130,20 +124,11 @@ npm start
 ### Database Setup
 
 ```bash
-# Create the database
-createdb camelliadb
-
 # Apply schema
-psql -U postgres -d camelliadb -f src/db/schema.sql
+psql -U <user> -d <database> -f src/db/schema.sql
 
 # Seed super admin account
 node src/db/seed.js
-```
-
-### Apply Migrations
-
-```bash
-psql -U postgres -d camelliadb -f migrations/<migration-file>.sql
 ```
 
 ---
@@ -156,10 +141,4 @@ All protected routes require a Firebase ID token in the `Authorization` header:
 Authorization: Bearer <firebase-id-token>
 ```
 
-Role-based access is enforced via the `checkRole` middleware. Available roles: `tourist`, `plantationadmin`, `superadmin`.
-
----
-
-## Contact
-
-**camelliaceylonplatform@gmail.com**
+Tourists authenticate via Firebase Auth. Plantation Admins and Super Admins receive a Firebase Custom Token upon successful username/password login.
