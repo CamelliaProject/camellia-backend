@@ -175,17 +175,17 @@ export async function savePayHerePayment(req, res) {
     const user = req.user;
     const { booking_reference, payment_id } = req.body;
 
-    if (!booking_reference || !payment_id) {
-      return res.status(400).json({ error: 'booking_reference and payment_id are required.' });
+    if (!booking_reference) {
+      return res.status(400).json({ error: 'booking_reference is required.' });
     }
 
     // Only update if this booking belongs to the authenticated tourist
     const { rows: updated } = await pool.query(
       `UPDATE bookings
-       SET payhere_payment_id = $1, updated_at = now()
+       SET payhere_payment_id = COALESCE($1, payhere_payment_id), updated_at = now()
        WHERE booking_reference = $2 AND tourist_id = $3
        RETURNING *`,
-      [payment_id, booking_reference, user.id]
+      [payment_id || null, booking_reference, user.id]
     );
 
     // Send confirmation email fire-and-forget
