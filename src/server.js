@@ -15,6 +15,7 @@ import authRoutes from './routes/authRoutes.js';
 import { startCronJobs } from './services/cronService.js';
 import contactRoutes from './routes/contactRoutes.js';
 import settingsRoutes from './routes/settingsRoutes.js';
+import { runMigrations } from './db/migrate.js';
 
 dotenv.config();
 
@@ -56,12 +57,20 @@ app.get('/api/health', (req, res) => {
     });
 });
 
-// TEST DATABASE CONNECTION ON BOOT
+// TEST DATABASE CONNECTION ON BOOT, THEN RUN MIGRATIONS
 try {
     const res = await pool.query('SELECT NOW()');
     console.log(`Database connection verified. Current time from DB: ${res.rows[0].now}`);
 } catch (err) {
-    console.error(' Database connection error:', err.message);
+    console.error('Database connection error:', err.message);
+    process.exit(1);
+}
+
+try {
+    await runMigrations();
+} catch (err) {
+    console.error('Startup migration failed — server will not start.', err.message);
+    process.exit(1);
 }
 
 app.listen(PORT, () => {

@@ -169,7 +169,7 @@ CREATE TABLE bookings (
     plantation_id UUID NOT NULL REFERENCES plantations(id) ON DELETE RESTRICT,
     tourist_id UUID NOT NULL REFERENCES users(id) ON DELETE RESTRICT,
     booking_date DATE NOT NULL,
-    booking_time TIME NOT NULL,
+    booking_time TIME,
     num_adults INT NOT NULL DEFAULT 1,
     num_children INT DEFAULT 0,
     total_price_usd DECIMAL(10, 2),
@@ -199,6 +199,7 @@ CREATE TABLE booking_experiences (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     booking_id UUID NOT NULL REFERENCES bookings(id) ON DELETE CASCADE,
     experience_id UUID NOT NULL REFERENCES experiences(id) ON DELETE RESTRICT,
+    time_slot_id UUID REFERENCES time_slots(id) ON DELETE SET NULL,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(booking_id, experience_id)
 );

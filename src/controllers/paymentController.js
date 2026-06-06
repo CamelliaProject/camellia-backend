@@ -36,7 +36,10 @@ export async function getPayments(req, res) {
 
 // ── PayHere: create booking + return checkout params ──────────────────────
 export async function initiatePayHere(req, res) {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     const user = req.user;
     const {
       plantation_id,
@@ -51,6 +54,7 @@ export async function initiatePayHere(req, res) {
       tourist_country,
       special_notes,
       experience_ids,
+      booking_time,  // HH:MM selected by tourist
       usd_to_lkr_rate,
       // PayHere-specific
       currency,     // 'LKR' | 'USD'
@@ -62,6 +66,7 @@ export async function initiatePayHere(req, res) {
     } = req.body;
 
     if (!plantation_id || !booking_date || !tourist_full_name || !tourist_email || !amount || !currency) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Missing required fields.' });
     }
 
@@ -71,20 +76,58 @@ export async function initiatePayHere(req, res) {
     const backendUrl     = process.env.BACKEND_URL  || 'http://localhost:5000';
 
     if (!merchantId || !merchantSecret) {
+      await client.query('ROLLBACK');
       return res.status(500).json({ error: 'PayHere is not configured on the server.' });
+    }
+
+    // Count-based capacity check for each experience at the chosen visit time
+    const adults = num_adults || 1;
+    const children = num_children || 0;
+    const totalGuests = adults + children;
+
+    if (booking_time) {
+      const capRow = await client.query(
+        `SELECT
+           pts.capacity,
+           COALESCE(
+             (SELECT SUM(b.num_adults + b.num_children)
+              FROM bookings b
+              WHERE b.plantation_id = $1
+                AND b.booking_date  = $2::date
+                AND b.booking_time  = pts.slot_time
+                AND b.status       != 'cancelled'),
+             0
+           )::int AS booked
+         FROM plantation_time_slots pts
+         WHERE pts.plantation_id = $1
+           AND pts.slot_time     = $3::time
+           AND pts.day_of_week   = EXTRACT(DOW FROM $2::date)::int
+           AND pts.is_active     = true`,
+        [plantation_id, booking_date, booking_time]
+      );
+      if (capRow.rows.length) {
+        const { capacity, booked } = capRow.rows[0];
+        if (booked + totalGuests > capacity) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: `The ${booking_time} slot is now full. Please go back and choose another time.`,
+            available: Math.max(0, capacity - booked),
+          });
+        }
+      }
     }
 
     // Create booking
     const bookingReference = generateBookingReference();
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       `INSERT INTO bookings (
-        booking_reference, plantation_id, tourist_id, booking_date,
+        booking_reference, plantation_id, tourist_id, booking_date, booking_time,
         num_adults, num_children, total_price_usd, total_price_lkr, usd_to_lkr_rate,
         tourist_full_name, tourist_email, tourist_phone, tourist_country, special_notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
       [
-        bookingReference, plantation_id, user.id, booking_date,
-        num_adults || 1, num_children || 0,
+        bookingReference, plantation_id, user.id, booking_date, booking_time || null,
+        adults, children,
         total_price_usd || null, total_price_lkr || null, usd_to_lkr_rate || null,
         tourist_full_name, tourist_email,
         tourist_phone || null, tourist_country || null, special_notes || null,
@@ -94,12 +137,14 @@ export async function initiatePayHere(req, res) {
 
     if (Array.isArray(experience_ids) && experience_ids.length) {
       for (const experienceId of experience_ids) {
-        await pool.query(
+        await client.query(
           `INSERT INTO booking_experiences (booking_id, experience_id) VALUES ($1,$2) ON CONFLICT DO NOTHING`,
           [booking.id, experienceId]
         );
       }
     }
+
+    await client.query('COMMIT');
 
     const hash = generateHash(merchantId, bookingReference, amount, currency, merchantSecret);
 
@@ -126,8 +171,11 @@ export async function initiatePayHere(req, res) {
       },
     });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('initiatePayHere error:', error);
     return res.status(500).json({ error: 'Failed to initiate payment.' });
+  } finally {
+    client.release();
   }
 }
 

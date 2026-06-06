@@ -2,11 +2,15 @@ import pool from '../config/db.js';
 import { generateBookingReference } from '../utils/generators.js';
 
 export async function createBooking(req, res) {
+  const client = await pool.connect();
   try {
+    await client.query('BEGIN');
+
     const user = req.user;
     const {
       plantation_id,
       booking_date,
+      booking_time,
       num_adults,
       num_children,
       total_price_usd,
@@ -20,59 +24,86 @@ export async function createBooking(req, res) {
     } = req.body;
 
     if (!plantation_id || !booking_date || !tourist_full_name || !tourist_email) {
+      await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Missing required booking fields.' });
     }
 
-    const bookingReference = generateBookingReference();
-    const insertQuery = `
-      INSERT INTO bookings (
-        booking_reference,
-        plantation_id,
-        tourist_id,
-        booking_date,
-        num_adults,
-        num_children,
-        total_price_usd,
-        total_price_lkr,
-        tourist_full_name,
-        tourist_email,
-        tourist_phone,
-        tourist_country,
-        special_notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
-      RETURNING *
-    `;
+    const adults = num_adults || 1;
+    const children = num_children || 0;
+    const totalGuests = adults + children;
 
-    const values = [
-      bookingReference,
-      plantation_id,
-      user.id,
-      booking_date,
-      num_adults || 1,
-      num_children || 0,
-      total_price_usd || null,
-      total_price_lkr || null,
-      tourist_full_name,
-      tourist_email,
-      tourist_phone || null,
-      tourist_country || null,
-      special_notes || null,
-    ];
+    // booking_time comes from the tourist's selected visit time (HH:MM)
+    const bookingTime = booking_time || null;
 
-    const { rows } = await pool.query(insertQuery, values);
-    const booking = rows[0];
-
-    if (Array.isArray(experience_ids) && experience_ids.length) {
-      const insertExperienceQuery = `INSERT INTO booking_experiences (booking_id, experience_id) VALUES ($1, $2) ON CONFLICT DO NOTHING`;
-      for (const experienceId of experience_ids) {
-        await pool.query(insertExperienceQuery, [booking.id, experienceId]);
+    // Capacity check against plantation-level time slot
+    if (bookingTime) {
+      const capRow = await client.query(
+        `SELECT
+           pts.capacity,
+           COALESCE(
+             (SELECT SUM(b.num_adults + b.num_children)
+              FROM bookings b
+              WHERE b.plantation_id = $1
+                AND b.booking_date  = $2::date
+                AND b.booking_time  = pts.slot_time
+                AND b.status       != 'cancelled'),
+             0
+           )::int AS booked
+         FROM plantation_time_slots pts
+         WHERE pts.plantation_id = $1
+           AND pts.slot_time     = $3::time
+           AND pts.day_of_week   = EXTRACT(DOW FROM $2::date)::int
+           AND pts.is_active     = true`,
+        [plantation_id, booking_date, bookingTime]
+      );
+      if (capRow.rows.length) {
+        const { capacity, booked } = capRow.rows[0];
+        if (booked + totalGuests > capacity) {
+          await client.query('ROLLBACK');
+          return res.status(409).json({
+            error: `The ${bookingTime} slot is full. Please choose another time or reduce guests.`,
+            available: Math.max(0, capacity - booked),
+          });
+        }
       }
     }
 
+    const bookingReference = generateBookingReference();
+    const { rows } = await client.query(
+      `INSERT INTO bookings (
+        booking_reference, plantation_id, tourist_id, booking_date, booking_time,
+        num_adults, num_children, total_price_usd, total_price_lkr,
+        tourist_full_name, tourist_email, tourist_phone, tourist_country, special_notes
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+       RETURNING *`,
+      [
+        bookingReference, plantation_id, user.id, booking_date, bookingTime,
+        adults, children,
+        total_price_usd || null, total_price_lkr || null,
+        tourist_full_name, tourist_email,
+        tourist_phone || null, tourist_country || null, special_notes || null,
+      ]
+    );
+    const booking = rows[0];
+
+    if (Array.isArray(experience_ids) && experience_ids.length) {
+      for (const experienceId of experience_ids) {
+        await client.query(
+          `INSERT INTO booking_experiences (booking_id, experience_id)
+           VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+          [booking.id, experienceId]
+        );
+      }
+    }
+
+    await client.query('COMMIT');
     return res.status(201).json({ data: booking });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('createBooking error:', error);
     return res.status(500).json({ error: 'Failed to create booking.' });
+  } finally {
+    client.release();
   }
 }
 
@@ -190,26 +221,43 @@ export async function cancelBooking(req, res) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: 'Missing booking id parameter.' });
 
+  const client = await pool.connect();
   try {
-    const { rows } = await pool.query('SELECT * FROM bookings WHERE id = $1', [id]);
+    await client.query('BEGIN');
+
+    const { rows } = await client.query('SELECT * FROM bookings WHERE id = $1', [id]);
     if (!rows.length) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Booking not found.' });
     }
 
     const booking = rows[0];
     const user = req.user;
     if (user.role === 'tourist' && booking.tourist_id !== user.id) {
+      await client.query('ROLLBACK');
       return res.status(403).json({ error: 'Forbidden' });
     }
 
-    const updateResult = await pool.query(
+    if (booking.status === 'cancelled') {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: 'Booking is already cancelled.' });
+    }
+
+    // Count-based capacity — no counter to decrement; cancelling the booking
+    // is enough (the availability query excludes cancelled bookings).
+
+    const updateResult = await client.query(
       'UPDATE bookings SET status = $1, cancelled_by = $2, updated_at = now() WHERE id = $3 RETURNING *',
       ['cancelled', 'tourist', id]
     );
 
+    await client.query('COMMIT');
     return res.status(200).json({ data: updateResult.rows[0] });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('cancelBooking error:', error);
     return res.status(500).json({ error: 'Failed to cancel booking.' });
+  } finally {
+    client.release();
   }
 }

@@ -11,13 +11,17 @@ export async function getPlantationBookings(req, res) {
       `SELECT b.*, b.cancelled_by,
               u.username AS tourist_username,
               COALESCE(
-                json_agg(e.name ORDER BY e.name) FILTER (WHERE e.name IS NOT NULL),
+                json_agg(
+                  json_build_object('name', e.name, 'slot_time', ts.slot_time)
+                  ORDER BY ts.slot_time NULLS LAST, e.name
+                ) FILTER (WHERE e.name IS NOT NULL),
                 '[]'
-              ) AS experience_names
+              ) AS experience_slots
        FROM bookings b
        LEFT JOIN users u ON u.id = b.tourist_id
        LEFT JOIN booking_experiences be ON be.booking_id = b.id
        LEFT JOIN experiences e ON e.id = be.experience_id
+       LEFT JOIN time_slots ts ON ts.id = be.time_slot_id
        WHERE b.plantation_id = $1
        GROUP BY b.id, u.username
        ORDER BY b.created_at DESC`,
@@ -39,17 +43,26 @@ export async function updateBookingStatus(req, res) {
     return res.status(400).json({ error: 'Booking id and status are required.' });
   }
 
+  const client = await pool.connect();
   try {
-    // Fetch the existing booking first
-    const { rows: existing } = await pool.query('SELECT * FROM bookings WHERE id = $1', [bookingId]);
+    await client.query('BEGIN');
+
+    const { rows: existing } = await client.query('SELECT * FROM bookings WHERE id = $1', [bookingId]);
     if (!existing.length) {
+      await client.query('ROLLBACK');
       return res.status(404).json({ error: 'Booking not found.' });
     }
     const booking = existing[0];
 
+    if (booking.status === status) {
+      await client.query('ROLLBACK');
+      return res.status(409).json({ error: `Booking is already ${status}.` });
+    }
+
     // Enforce 7-day rule for admin cancellations
     if (status === 'cancelled') {
       if (!reason || !reason.trim()) {
+        await client.query('ROLLBACK');
         return res.status(400).json({ error: 'A cancellation reason is required.' });
       }
       if (booking.booking_date) {
@@ -59,15 +72,19 @@ export async function updateBookingStatus(req, res) {
         today.setHours(0, 0, 0, 0);
         const daysUntil = Math.round((bookingDay - today) / (1000 * 60 * 60 * 24));
         if (daysUntil < 7) {
+          await client.query('ROLLBACK');
           return res.status(400).json({
             error: `Cancellations must be made at least 7 days before the booking date. This booking is ${daysUntil} day${daysUntil === 1 ? '' : 's'} away.`,
           });
         }
       }
+
+      // Count-based capacity — cancelling the booking record is sufficient;
+      // availability queries already exclude cancelled status.
     }
 
     const cancelledBy = status === 'cancelled' ? 'admin' : null;
-    const { rows } = await pool.query(
+    const { rows } = await client.query(
       `UPDATE bookings
        SET status = $1,
            cancelled_by = COALESCE($3, cancelled_by),
@@ -76,10 +93,11 @@ export async function updateBookingStatus(req, res) {
       [status, bookingId, cancelledBy]
     );
 
+    await client.query('COMMIT');
+
     if (status === 'cancelled') {
       const contactEmail = process.env.CONTACT_EMAIL || process.env.EMAIL_USER || 'camelliaceylonplatform@gmail.com';
 
-      // Fire-and-forget: issue PayHere refund if a payment_id is stored
       if (booking.payhere_payment_id) {
         processRefund(
           booking.payhere_payment_id,
@@ -87,7 +105,6 @@ export async function updateBookingStatus(req, res) {
         ).catch(err => console.error('PayHere refund error:', err.message));
       }
 
-      // Fire-and-forget: send cancellation email to tourist
       if (booking.tourist_email) {
         sendBookingCancellationEmail(
           booking.tourist_email,
@@ -101,8 +118,11 @@ export async function updateBookingStatus(req, res) {
 
     return res.status(200).json({ booking: rows[0] });
   } catch (error) {
+    await client.query('ROLLBACK');
     console.error('updateBookingStatus error:', error);
     return res.status(500).json({ error: 'Failed to update booking status.' });
+  } finally {
+    client.release();
   }
 }
 

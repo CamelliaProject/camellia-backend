@@ -46,13 +46,18 @@ export async function getExperienceById(req, res) {
 
 export async function getExperienceSlots(req, res) {
   const { id } = req.params;
+  const { date } = req.query;
   if (!id) return res.status(400).json({ error: 'Missing experience id parameter.' });
 
   try {
-    const result = await pool.query(
-      'SELECT * FROM time_slots WHERE experience_id = $1 ORDER BY slot_date, slot_time',
-      [id]
-    );
+    let query = 'SELECT * FROM time_slots WHERE experience_id = $1';
+    const values = [id];
+    if (date) {
+      query += ' AND slot_date = $2';
+      values.push(date);
+    }
+    query += ' ORDER BY slot_date, slot_time';
+    const result = await pool.query(query, values);
     return res.status(200).json({ data: result.rows });
   } catch (error) {
     console.error('getExperienceSlots error:', error);
@@ -140,11 +145,29 @@ export async function createExperience(req, res) {
   }
 }
 
+async function countUpcomingBookings(experienceId) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM booking_experiences be
+     JOIN bookings b ON b.id = be.booking_id
+     WHERE be.experience_id = $1 AND b.status = 'upcoming'`,
+    [experienceId]
+  );
+  return rows[0].count;
+}
+
 export async function updateExperience(req, res) {
   const { id } = req.params;
   if (!id) return res.status(400).json({ error: 'Missing experience id parameter.' });
 
   try {
+    const activeCount = await countUpcomingBookings(id);
+    if (activeCount > 0) {
+      return res.status(409).json({
+        error: `This experience has ${activeCount} upcoming booking${activeCount > 1 ? 's' : ''}. Cancel or complete all bookings before making changes.`,
+        booking_count: activeCount,
+      });
+    }
     const body = req.body || {};
     const fields = [];
     const values = [];
@@ -222,6 +245,14 @@ export async function deleteExperience(req, res) {
   if (!id) return res.status(400).json({ error: 'Missing experience id parameter.' });
 
   try {
+    const activeCount = await countUpcomingBookings(id);
+    if (activeCount > 0) {
+      return res.status(409).json({
+        error: `Cannot delete: this experience has ${activeCount} upcoming booking${activeCount > 1 ? 's' : ''}. Cancel or complete them first.`,
+        booking_count: activeCount,
+      });
+    }
+
     const { rows } = await pool.query('DELETE FROM experiences WHERE id = $1 RETURNING *', [id]);
     if (!rows.length) {
       return res.status(404).json({ error: 'Experience not found.' });
@@ -253,39 +284,70 @@ export async function deleteExperienceImage(req, res) {
 }
 
 export async function createExperienceSlot(req, res) {
-  const { experience_id, slot_date, slot_time, available_seats, capacity } = req.body;
+  const experienceId = req.params.id || req.body.experience_id;
+  const { slot_date, slot_time, available_seats, capacity } = req.body;
   const slotCapacity = capacity ?? available_seats;
 
-  if (!experience_id || !slot_date || !slot_time) {
+  if (!experienceId || !slot_date || !slot_time) {
     return res.status(400).json({
-      error: 'experience_id, slot_date, and slot_time are required.'
+      error: 'experience id, slot_date, and slot_time are required.'
     });
   }
 
   try {
-    const query = `
-      INSERT INTO time_slots (
-        experience_id,
-        slot_date,
-        slot_time,
-        capacity
-      )
-      VALUES ($1, $2, $3, $4)
-      RETURNING *
-    `;
-
-    const values = [
-      experience_id,
-      slot_date,
-      slot_time,
-      slotCapacity || 10
-    ];
-
-    const { rows } = await pool.query(query, values);
-
+    const { rows } = await pool.query(
+      `INSERT INTO time_slots (experience_id, slot_date, slot_time, capacity)
+       VALUES ($1, $2, $3, $4)
+       ON CONFLICT (experience_id, slot_date, slot_time)
+       DO UPDATE SET capacity = EXCLUDED.capacity, updated_at = now()
+       RETURNING *`,
+      [experienceId, slot_date, slot_time, slotCapacity || 10]
+    );
     return res.status(201).json({ data: rows[0] });
   } catch (error) {
     console.error('createExperienceSlot error:', error);
     return res.status(500).json({ error: 'Failed to create experience slot.' });
+  }
+}
+
+export async function updateExperienceSlot(req, res) {
+  const { slotId } = req.params;
+  const { capacity } = req.body;
+  if (!slotId) return res.status(400).json({ error: 'Missing slot id.' });
+  const cap = parseInt(capacity, 10);
+  if (!cap || cap < 1) return res.status(400).json({ error: 'Capacity must be at least 1.' });
+
+  try {
+    const { rows } = await pool.query(
+      `UPDATE time_slots SET capacity = $1, updated_at = now()
+       WHERE id = $2 AND booked <= $1
+       RETURNING *`,
+      [cap, slotId]
+    );
+    if (!rows.length) {
+      return res.status(409).json({ error: 'Slot not found or new capacity is less than already-booked count.' });
+    }
+    return res.status(200).json({ data: rows[0] });
+  } catch (error) {
+    console.error('updateExperienceSlot error:', error);
+    return res.status(500).json({ error: 'Failed to update slot.' });
+  }
+}
+
+export async function deleteExperienceSlot(req, res) {
+  const { slotId } = req.params;
+  if (!slotId) return res.status(400).json({ error: 'Missing slot id.' });
+
+  try {
+    const check = await pool.query('SELECT booked FROM time_slots WHERE id = $1', [slotId]);
+    if (!check.rows.length) return res.status(404).json({ error: 'Slot not found.' });
+    if (check.rows[0].booked > 0) {
+      return res.status(409).json({ error: 'Cannot delete a slot that already has bookings.' });
+    }
+    await pool.query('DELETE FROM time_slots WHERE id = $1', [slotId]);
+    return res.status(200).json({ data: { deleted: true } });
+  } catch (error) {
+    console.error('deleteExperienceSlot error:', error);
+    return res.status(500).json({ error: 'Failed to delete slot.' });
   }
 }
