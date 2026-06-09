@@ -52,6 +52,8 @@ export async function initiatePayHere(req, res) {
       tourist_email,
       tourist_phone,
       tourist_country,
+      tourist_city,
+      tourist_nic_passport,
       special_notes,
       experience_ids,
       booking_time,  // HH:MM selected by tourist
@@ -68,6 +70,41 @@ export async function initiatePayHere(req, res) {
     if (!plantation_id || !booking_date || !tourist_full_name || !tourist_email || !amount || !currency) {
       await client.query('ROLLBACK');
       return res.status(400).json({ error: 'Missing required fields.' });
+    }
+
+    // Server-side validation of tourist detail fields
+    const detailErrs = [];
+
+    if (!tourist_full_name?.trim() || tourist_full_name.trim().length < 2) {
+      detailErrs.push('Full name must be at least 2 characters.');
+    }
+    if (!tourist_email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tourist_email.trim())) {
+      detailErrs.push('Invalid email address.');
+    }
+    if (!tourist_phone?.trim() || !/^\+?[\d\s\-()+.]{5,20}$/.test(tourist_phone.trim())) {
+      detailErrs.push('Invalid phone number format.');
+    }
+    if (!tourist_country?.trim()) {
+      detailErrs.push('Country is required.');
+    }
+    if (!tourist_city?.trim() || tourist_city.trim().length < 2) {
+      detailErrs.push('City is required (at least 2 characters).');
+    } else if (!/^[\p{L}\s\-'.]{2,100}$/u.test(tourist_city.trim())) {
+      detailErrs.push('City name contains invalid characters.');
+    }
+    if (!tourist_nic_passport?.trim()) {
+      detailErrs.push(tourist_country === 'Sri Lanka' ? 'NIC number is required.' : 'Passport number is required.');
+    } else if (tourist_country === 'Sri Lanka') {
+      if (!/^\d{9}[VvXx]$|^\d{12}$/.test(tourist_nic_passport.trim())) {
+        detailErrs.push('Invalid Sri Lankan NIC format (e.g. 123456789V or 200012345678).');
+      }
+    } else if (!/^[A-Z0-9\- ]{5,20}$/i.test(tourist_nic_passport.trim())) {
+      detailErrs.push('Invalid passport number format (5–20 letters and digits).');
+    }
+
+    if (detailErrs.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Validation failed.', details: detailErrs });
     }
 
     const merchantId     = process.env.PAYHERE_MERCHANT_ID;
@@ -123,14 +160,16 @@ export async function initiatePayHere(req, res) {
       `INSERT INTO bookings (
         booking_reference, plantation_id, tourist_id, booking_date, booking_time,
         num_adults, num_children, total_price_usd, total_price_lkr, usd_to_lkr_rate,
-        tourist_full_name, tourist_email, tourist_phone, tourist_country, special_notes
-      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15) RETURNING *`,
+        tourist_full_name, tourist_email, tourist_phone, tourist_country,
+        tourist_city, tourist_nic_passport, special_notes
+      ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [
         bookingReference, plantation_id, user.id, booking_date, booking_time || null,
         adults, children,
         total_price_usd || null, total_price_lkr || null, usd_to_lkr_rate || null,
         tourist_full_name, tourist_email,
-        tourist_phone || null, tourist_country || null, special_notes || null,
+        tourist_phone || null, tourist_country || null,
+        tourist_city || null, tourist_nic_passport || null, special_notes || null,
       ]
     );
     const booking = rows[0];

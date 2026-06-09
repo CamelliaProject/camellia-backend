@@ -19,6 +19,8 @@ export async function createBooking(req, res) {
       tourist_email,
       tourist_phone,
       tourist_country,
+      tourist_city,
+      tourist_nic_passport,
       special_notes,
       experience_ids,
     } = req.body;
@@ -73,15 +75,17 @@ export async function createBooking(req, res) {
       `INSERT INTO bookings (
         booking_reference, plantation_id, tourist_id, booking_date, booking_time,
         num_adults, num_children, total_price_usd, total_price_lkr,
-        tourist_full_name, tourist_email, tourist_phone, tourist_country, special_notes
-       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
+        tourist_full_name, tourist_email, tourist_phone, tourist_country,
+        tourist_city, tourist_nic_passport, special_notes
+       ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        RETURNING *`,
       [
         bookingReference, plantation_id, user.id, booking_date, bookingTime,
         adults, children,
         total_price_usd || null, total_price_lkr || null,
         tourist_full_name, tourist_email,
-        tourist_phone || null, tourist_country || null, special_notes || null,
+        tourist_phone || null, tourist_country || null,
+        tourist_city || null, tourist_nic_passport || null, special_notes || null,
       ]
     );
     const booking = rows[0];
