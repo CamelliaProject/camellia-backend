@@ -49,39 +49,40 @@ export async function getReviewsByPlantation(req, res) {
 export async function createReview(req, res) {
   try {
     const user = req.user;
-    const { plantation_id, rating, title, content, image_url } = req.body;
+    const { booking_id, rating, title, content, image_url } = req.body;
 
-    if (!plantation_id || !rating || !content) {
-      return res.status(400).json({ error: 'Plantation, rating, and content are required.' });
+    if (!booking_id || !rating || !content) {
+      return res.status(400).json({ error: 'Booking, rating, and content are required.' });
     }
 
-    // Must have a completed booking for this plantation
+    // Verify this is a completed booking belonging to this tourist and get plantation_id
     const bookingCheck = await pool.query(
-      `SELECT id FROM bookings
-       WHERE tourist_id = $1 AND plantation_id = $2 AND status = 'completed'
-       LIMIT 1`,
-      [user.id, plantation_id]
+      `SELECT id, plantation_id FROM bookings
+       WHERE id = $1 AND tourist_id = $2 AND status = 'completed'`,
+      [booking_id, user.id]
     );
 
     if (!bookingCheck.rows.length) {
-      return res.status(403).json({ error: 'You must have completed a visit to this plantation to leave a review.' });
+      return res.status(403).json({ error: 'You must have completed this visit to leave a review.' });
     }
 
-    // Prevent duplicate reviews
+    const plantation_id = bookingCheck.rows[0].plantation_id;
+
+    // Prevent duplicate review for the same booking
     const existingReview = await pool.query(
-      `SELECT id FROM reviews WHERE tourist_id = $1 AND plantation_id = $2 LIMIT 1`,
-      [user.id, plantation_id]
+      `SELECT id FROM reviews WHERE tourist_id = $1 AND booking_id = $2 LIMIT 1`,
+      [user.id, booking_id]
     );
 
     if (existingReview.rows.length) {
-      return res.status(400).json({ error: 'You have already reviewed this plantation.' });
+      return res.status(400).json({ error: 'You have already reviewed this visit.' });
     }
 
     const { rows } = await pool.query(
       `INSERT INTO reviews (plantation_id, tourist_id, booking_id, rating, title, content, image_url, is_verified)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
        RETURNING *`,
-      [plantation_id, user.id, bookingCheck.rows[0].id, rating, title || null, content, image_url || null, false]
+      [plantation_id, user.id, booking_id, rating, title || null, content, image_url || null, false]
     );
 
     // Keep plantation rating and total_reviews in sync

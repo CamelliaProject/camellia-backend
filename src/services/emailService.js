@@ -129,10 +129,10 @@ export async function sendBookingCancellationEmail(to, touristName, booking, rea
   const bookingDate = booking.booking_date
     ? new Date(booking.booking_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : '—';
-  const amountLine = booking.total_price_lkr
-    ? `Rs ${Number(booking.total_price_lkr).toLocaleString()} (LKR)`
-    : booking.total_price_usd
+  const amountLine = booking.total_price_usd
     ? `$ ${Number(booking.total_price_usd).toLocaleString()} (USD)`
+    : booking.total_price_lkr
+    ? `Rs ${Number(booking.total_price_lkr).toLocaleString()} (LKR)`
     : null;
 
   await transporter.sendMail({
@@ -240,10 +240,10 @@ export async function sendBookingConfirmationEmail(to, touristName, booking, exp
   const bookingDate = booking.booking_date
     ? new Date(booking.booking_date).toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
     : '—';
-  const amountLine = booking.total_price_lkr
-    ? `Rs ${Number(booking.total_price_lkr).toLocaleString()} (LKR)`
-    : booking.total_price_usd
+  const amountLine = booking.total_price_usd
     ? `$ ${Number(booking.total_price_usd).toLocaleString()} (USD)`
+    : booking.total_price_lkr
+    ? `Rs ${Number(booking.total_price_lkr).toLocaleString()} (LKR)`
     : null;
   const expList = experiences.length
     ? `<ul style="margin:8px 0 0;padding-left:20px;color:#1B4332;">${experiences.map(e => `<li style="margin-bottom:4px;">${e}</li>`).join('')}</ul>`
