@@ -57,6 +57,20 @@ async function countSlotUpcomingBookings(slot) {
   return rows[0].count;
 }
 
+async function getBookedGuestsForWeeklySlot(slot) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(b.num_adults + b.num_children), 0)::int AS booked_guests
+     FROM bookings b
+     JOIN booking_experiences be ON be.booking_id = b.id
+     WHERE be.experience_id = $1
+       AND b.booking_time   = $2
+       AND EXTRACT(DOW FROM b.booking_date)::int = $3
+       AND b.status         = 'upcoming'`,
+    [slot.experience_id, slot.slot_time, slot.day_of_week]
+  );
+  return rows[0].booked_guests;
+}
+
 export async function updateWeeklySlot(req, res) {
   const { slotId } = req.params;
   const { capacity } = req.body;
@@ -67,11 +81,12 @@ export async function updateWeeklySlot(req, res) {
     if (!slotRes.rows.length) return res.status(404).json({ error: 'Slot not found.' });
     const slot = slotRes.rows[0];
 
-    const activeCount = await countSlotUpcomingBookings(slot);
-    if (activeCount > 0) {
+    const bookedGuests = await getBookedGuestsForWeeklySlot(slot);
+    if (bookedGuests > 0 && cap < bookedGuests) {
       return res.status(409).json({
-        error: `This time slot has ${activeCount} upcoming booking${activeCount > 1 ? 's' : ''}. Cancel or complete them before changing capacity.`,
-        booking_count: activeCount,
+        error: `Cannot reduce capacity below ${bookedGuests} — that is the number of guests already booked for this slot. You may increase it.`,
+        booked_guests: bookedGuests,
+        min_capacity: bookedGuests,
       });
     }
 
@@ -240,15 +255,60 @@ export async function removeClosingDate(req, res) {
   }
 }
 
+async function countPlantationSlotUpcomingBookings(slot) {
+  const { rows } = await pool.query(
+    `SELECT COUNT(*)::int AS count
+     FROM bookings b
+     WHERE b.plantation_id = $1
+       AND b.booking_time   = $2
+       AND EXTRACT(DOW FROM b.booking_date)::int = $3
+       AND b.status         = 'upcoming'`,
+    [slot.plantation_id, slot.slot_time, slot.day_of_week]
+  );
+  return rows[0].count;
+}
+
+async function getBookedGuestsForPlantationSlot(slot) {
+  const { rows } = await pool.query(
+    `SELECT COALESCE(SUM(b.num_adults + b.num_children), 0)::int AS booked_guests
+     FROM bookings b
+     WHERE b.plantation_id = $1
+       AND b.booking_time   = $2
+       AND EXTRACT(DOW FROM b.booking_date)::int = $3
+       AND b.status         = 'upcoming'`,
+    [slot.plantation_id, slot.slot_time, slot.day_of_week]
+  );
+  return rows[0].booked_guests;
+}
+
 // ── Plantation-level time slots ───────────────────────────────────────────────
 
 export async function getPlantationTimeSlots(req, res) {
   const { id: plantationId } = req.params;
   try {
     const { rows } = await pool.query(
-      `SELECT * FROM plantation_time_slots
-       WHERE plantation_id = $1
-       ORDER BY day_of_week, slot_time`,
+      `SELECT pts.*,
+              COALESCE(
+                (SELECT COUNT(*)::int
+                 FROM bookings b
+                 WHERE b.plantation_id = pts.plantation_id
+                   AND b.booking_time  = pts.slot_time
+                   AND EXTRACT(DOW FROM b.booking_date)::int = pts.day_of_week
+                   AND b.status = 'upcoming'),
+                0
+              ) AS upcoming_booking_count,
+              COALESCE(
+                (SELECT SUM(b.num_adults + b.num_children)::int
+                 FROM bookings b
+                 WHERE b.plantation_id = pts.plantation_id
+                   AND b.booking_time  = pts.slot_time
+                   AND EXTRACT(DOW FROM b.booking_date)::int = pts.day_of_week
+                   AND b.status = 'upcoming'),
+                0
+              ) AS booked_guests
+       FROM plantation_time_slots pts
+       WHERE pts.plantation_id = $1
+       ORDER BY pts.day_of_week, pts.slot_time`,
       [plantationId]
     );
     return res.json({ data: rows });
@@ -287,11 +347,23 @@ export async function updatePlantationTimeSlot(req, res) {
   const cap = parseInt(capacity, 10);
   if (!cap || cap < 1) return res.status(400).json({ error: 'Capacity must be at least 1.' });
   try {
+    const slotRes = await pool.query('SELECT * FROM plantation_time_slots WHERE id = $1', [slotId]);
+    if (!slotRes.rows.length) return res.status(404).json({ error: 'Slot not found.' });
+    const slot = slotRes.rows[0];
+
+    const bookedGuests = await getBookedGuestsForPlantationSlot(slot);
+    if (bookedGuests > 0 && cap < bookedGuests) {
+      return res.status(409).json({
+        error: `Cannot reduce capacity below ${bookedGuests} — that is the number of guests already booked for this slot. You may increase it.`,
+        booked_guests: bookedGuests,
+        min_capacity: bookedGuests,
+      });
+    }
+
     const { rows } = await pool.query(
       `UPDATE plantation_time_slots SET capacity = $1 WHERE id = $2 RETURNING *`,
       [cap, slotId]
     );
-    if (!rows.length) return res.status(404).json({ error: 'Slot not found.' });
     return res.json({ data: rows[0] });
   } catch (err) {
     console.error('updatePlantationTimeSlot error:', err);
@@ -302,11 +374,19 @@ export async function updatePlantationTimeSlot(req, res) {
 export async function deletePlantationTimeSlot(req, res) {
   const { slotId } = req.params;
   try {
-    const { rows } = await pool.query(
-      'DELETE FROM plantation_time_slots WHERE id = $1 RETURNING id',
-      [slotId]
-    );
-    if (!rows.length) return res.status(404).json({ error: 'Slot not found.' });
+    const slotRes = await pool.query('SELECT * FROM plantation_time_slots WHERE id = $1', [slotId]);
+    if (!slotRes.rows.length) return res.status(404).json({ error: 'Slot not found.' });
+    const slot = slotRes.rows[0];
+
+    const activeCount = await countPlantationSlotUpcomingBookings(slot);
+    if (activeCount > 0) {
+      return res.status(409).json({
+        error: `Cannot delete: this time slot has ${activeCount} upcoming booking${activeCount > 1 ? 's' : ''}. Cancel or complete them first.`,
+        booking_count: activeCount,
+      });
+    }
+
+    await pool.query('DELETE FROM plantation_time_slots WHERE id = $1', [slotId]);
     return res.json({ data: { deleted: true } });
   } catch (err) {
     console.error('deletePlantationTimeSlot error:', err);

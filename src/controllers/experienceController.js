@@ -7,11 +7,18 @@ export async function getExperiencesByPlantation(req, res) {
 
   try {
     const results = await pool.query(
-      `SELECT id, plantation_id, name, short_description, detailed_description, category, announcement,
-              price_usd_adult, price_usd_child, price_lkr_adult, price_lkr_child, is_active, created_at, updated_at
-       FROM experiences
-       WHERE plantation_id = $1
-       ORDER BY created_at DESC`,
+      `SELECT e.id, e.plantation_id, e.name, e.short_description, e.detailed_description, e.category, e.announcement,
+              e.price_usd_adult, e.price_usd_child, e.price_lkr_adult, e.price_lkr_child, e.is_active, e.created_at, e.updated_at,
+              COALESCE(
+                (SELECT COUNT(*)::int
+                 FROM booking_experiences be
+                 JOIN bookings b ON b.id = be.booking_id
+                 WHERE be.experience_id = e.id AND b.status = 'upcoming'),
+                0
+              ) AS upcoming_booking_count
+       FROM experiences e
+       WHERE e.plantation_id = $1
+       ORDER BY e.created_at DESC`,
       [plantationId]
     );
 
@@ -161,14 +168,21 @@ export async function updateExperience(req, res) {
   if (!id) return res.status(400).json({ error: 'Missing experience id parameter.' });
 
   try {
-    const activeCount = await countUpcomingBookings(id);
-    if (activeCount > 0) {
-      return res.status(409).json({
-        error: `This experience has ${activeCount} upcoming booking${activeCount > 1 ? 's' : ''}. Cancel or complete all bookings before making changes.`,
-        booking_count: activeCount,
-      });
-    }
     const body = req.body || {};
+
+    const LOCKED_FIELDS = ['name', 'price_usd_adult', 'price_usd_child', 'price_lkr_adult', 'price_lkr_child'];
+    const hasLockedChange = LOCKED_FIELDS.some(f => Object.prototype.hasOwnProperty.call(body, f));
+
+    if (hasLockedChange) {
+      const activeCount = await countUpcomingBookings(id);
+      if (activeCount > 0) {
+        return res.status(409).json({
+          error: `Cannot change name or prices: this experience has ${activeCount} upcoming booking${activeCount > 1 ? 's' : ''}. These fields are locked while customers have active bookings.`,
+          booking_count: activeCount,
+          locked_fields: LOCKED_FIELDS,
+        });
+      }
+    }
     const fields = [];
     const values = [];
 
