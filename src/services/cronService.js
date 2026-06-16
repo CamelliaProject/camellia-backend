@@ -2,16 +2,18 @@ import pool from '../config/db.js';
 import { sendSubscriptionRenewalReminderEmail } from './emailService.js';
 import { SUBSCRIPTION_LABELS } from '../constants/index.js';
 
+const DISABLE_GRACE_PERIOD_DAYS = 14;
+
 async function runSubscriptionReminderCheck() {
   console.log('[cron] Running subscription reminder check…');
   try {
     const { rows } = await pool.query(`
-      SELECT ps.*, p.name AS plantation_name, p.email AS plantation_email,
+      SELECT ps.*, p.name AS plantation_name, p.email AS plantation_email, p.is_disabled,
              u.name AS owner_name
       FROM plantation_subscriptions ps
       JOIN plantations p ON p.id = ps.plantation_id
       LEFT JOIN users u ON u.plantation_id = ps.plantation_id AND u.role = 'plantationadmin'
-      WHERE ps.status = 'active'
+      WHERE ps.status IN ('active', 'expired')
     `);
 
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
@@ -35,8 +37,26 @@ async function runSubscriptionReminderCheck() {
           `UPDATE plantation_subscriptions SET status = 'expired', updated_at = now() WHERE id = $1`,
           [sub.id]
         );
-        continue;
       }
+
+      // Reconcile plantation access with actual payment status:
+      // currently within the paid period → always enabled; unpaid past the
+      // grace period → disabled. Covers stale/manually-set is_disabled flags.
+      if (daysLeft >= 0 && sub.is_disabled) {
+        await pool.query(
+          `UPDATE plantations SET is_disabled = false, updated_at = now() WHERE id = $1`,
+          [sub.plantation_id]
+        );
+        console.log(`[cron] Auto-enabled plantation (subscription paid through ${sub.end_date}) → ${sub.plantation_name}`);
+      } else if (daysLeft <= -DISABLE_GRACE_PERIOD_DAYS && !sub.is_disabled) {
+        await pool.query(
+          `UPDATE plantations SET is_disabled = true, updated_at = now() WHERE id = $1`,
+          [sub.plantation_id]
+        );
+        console.log(`[cron] Auto-disabled plantation (unpaid past grace period) → ${sub.plantation_name}`);
+      }
+
+      if (sub.status !== 'active') continue;
 
       // 30-day reminder
       if (daysLeft === 30 && !sub.reminder_1month_sent) {

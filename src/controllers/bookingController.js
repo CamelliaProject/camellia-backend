@@ -1,5 +1,6 @@
 import pool from '../config/db.js';
 import { generateBookingReference } from '../utils/generators.js';
+import { STARTER_BOOKING_LIMIT } from '../constants/index.js';
 
 export async function createBooking(req, res) {
   const client = await pool.connect();
@@ -36,6 +37,30 @@ export async function createBooking(req, res) {
 
     // booking_time comes from the tourist's selected visit time (HH:MM)
     const bookingTime = booking_time || null;
+
+    // Starter plan: enforce the per-subscription-year booking cap. Pro is unlimited.
+    const { rows: subRows } = await client.query(
+      `SELECT subscription_type, start_date, end_date
+       FROM plantation_subscriptions
+       WHERE plantation_id = $1 AND status = 'active'
+       ORDER BY end_date DESC LIMIT 1`,
+      [plantation_id]
+    );
+    if (subRows.length && subRows[0].subscription_type === 'starter') {
+      const { start_date, end_date } = subRows[0];
+      const { rows: countRows } = await client.query(
+        `SELECT COUNT(*)::int AS count FROM bookings
+         WHERE plantation_id = $1 AND status != 'cancelled'
+           AND booking_date BETWEEN $2 AND $3`,
+        [plantation_id, start_date, end_date]
+      );
+      if (countRows[0].count >= STARTER_BOOKING_LIMIT) {
+        await client.query('ROLLBACK');
+        return res.status(409).json({
+          error: `This plantation has reached its Starter plan limit of ${STARTER_BOOKING_LIMIT.toLocaleString()} bookings for this subscription year. Upgrade to Pro for unlimited bookings.`,
+        });
+      }
+    }
 
     // Capacity check against plantation-level time slot
     if (bookingTime) {

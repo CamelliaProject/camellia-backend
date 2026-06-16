@@ -2,6 +2,7 @@ import pool from '../config/db.js';
 import { generateHash, getCheckoutUrl, verifyNotify } from '../services/payhereService.js';
 import { sendBookingConfirmationEmail, sendApprovalCredentials } from '../services/emailService.js';
 import { generatePassword, generateBookingReference } from '../utils/generators.js';
+import { SUBSCRIPTION_AMOUNTS } from '../constants/index.js';
 
 
 export async function getPayments(req, res) {
@@ -319,7 +320,7 @@ export async function initiateSubscription(req, res) {
     const merchantSecret = process.env.PAYHERE_MERCHANT_SECRET;
     const frontendUrl    = process.env.FRONTEND_URL || 'http://localhost:5173';
     const backendUrl     = process.env.BACKEND_URL  || 'http://localhost:5000';
-    const amount         = request.subscription_amount || 24000;
+    const amount         = request.subscription_amount || SUBSCRIPTION_AMOUNTS.starter;
     const orderId        = `SUB-${token}`;
 
     const hash = generateHash(merchantId, orderId, amount, 'LKR', merchantSecret);
@@ -403,7 +404,7 @@ export async function confirmSubscriptionPayment(req, res) {
          (plantation_id, plantation_request_id, subscription_type, amount, start_date, end_date, status, payhere_payment_id)
        VALUES ($1,$2,$3,$4,$5,$6,'active',$7)`,
       [request.linked_plantation_id, token,
-       request.subscription_type || 'starter', request.subscription_amount || 24000,
+       request.subscription_type || 'starter', request.subscription_amount || SUBSCRIPTION_AMOUNTS.starter,
        startDate.toISOString().slice(0,10), endDate.toISOString().slice(0,10),
        payment_id || null]
     );

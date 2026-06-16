@@ -204,21 +204,6 @@ export async function getSubscriptionEarnings(req, res) {
   }
 }
 
-export async function togglePlantationDisabled(req, res) {
-  const { plantationId } = req.params;
-  const { disabled } = req.body;
-  try {
-    await pool.query(
-      `UPDATE plantations SET is_disabled = $1, updated_at = now() WHERE id = $2`,
-      [!!disabled, plantationId]
-    );
-    return res.status(200).json({ ok: true });
-  } catch (error) {
-    console.error('togglePlantationDisabled error:', error);
-    return res.status(500).json({ error: 'Failed to update plantation status.' });
-  }
-}
-
 export async function getPlantationReviews(req, res) {
   const { plantationId } = req.params;
   if (!plantationId) return res.status(400).json({ error: 'Missing plantation id parameter.' });

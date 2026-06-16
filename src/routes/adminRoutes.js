@@ -8,7 +8,6 @@ import {
   getPlantationPayments,
   getSubscriptions,
   getSubscriptionEarnings,
-  togglePlantationDisabled,
 } from '../controllers/adminController.js';
 import { getAllPlantationsForAdmin } from '../controllers/plantationController.js';
 
@@ -18,7 +17,6 @@ router.use(authenticate);
 router.get('/plantations', checkRole('superadmin'), getAllPlantationsForAdmin);
 router.get('/subscriptions', checkRole('superadmin'), getSubscriptions);
 router.get('/subscription-earnings', checkRole('superadmin'), getSubscriptionEarnings);
-router.put('/plantations/:plantationId/toggle-disabled', checkRole('superadmin'), togglePlantationDisabled);
 
 router.get('/bookings/:plantationId', checkRole('superadmin', 'plantationadmin'), getPlantationBookings);
 router.put('/bookings/:plantationId/:bookingId', checkRole('superadmin', 'plantationadmin'), updateBookingStatus);
