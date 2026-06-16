@@ -31,6 +31,31 @@ export async function createBooking(req, res) {
       return res.status(400).json({ error: 'Missing required booking fields.' });
     }
 
+    // Server-side validation of tourist detail fields (mirrors initiatePayHere)
+    const detailErrs = [];
+    if (!tourist_phone?.trim()) {
+      detailErrs.push('Phone number is required.');
+    } else if (tourist_country === 'Sri Lanka') {
+      if (!/^\+94\d{9}$/.test(tourist_phone.trim())) {
+        detailErrs.push('Resident bookings require a valid Sri Lankan mobile number (+94XXXXXXXXX).');
+      }
+    } else if (!/^\+?[\d\s\-()+.]{5,20}$/.test(tourist_phone.trim())) {
+      detailErrs.push('Invalid phone number format.');
+    }
+    if (!tourist_nic_passport?.trim()) {
+      detailErrs.push(tourist_country === 'Sri Lanka' ? 'NIC number is required.' : 'Passport number is required.');
+    } else if (tourist_country === 'Sri Lanka') {
+      if (!/^\d{9}[VvXx]$|^\d{12}$/.test(tourist_nic_passport.trim())) {
+        detailErrs.push('Invalid Sri Lankan NIC format (e.g. 123456789V or 200012345678).');
+      }
+    } else if (!/^[A-Z0-9\- ]{5,20}$/i.test(tourist_nic_passport.trim())) {
+      detailErrs.push('Invalid passport number format (5–20 letters and digits).');
+    }
+    if (detailErrs.length > 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).json({ error: 'Validation failed.', details: detailErrs });
+    }
+
     const adults = num_adults || 1;
     const children = num_children || 0;
     const totalGuests = adults + children;

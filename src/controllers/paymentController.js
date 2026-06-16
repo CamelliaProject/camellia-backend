@@ -82,7 +82,13 @@ export async function initiatePayHere(req, res) {
     if (!tourist_email?.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(tourist_email.trim())) {
       detailErrs.push('Invalid email address.');
     }
-    if (!tourist_phone?.trim() || !/^\+?[\d\s\-()+.]{5,20}$/.test(tourist_phone.trim())) {
+    if (!tourist_phone?.trim()) {
+      detailErrs.push('Phone number is required.');
+    } else if (tourist_country === 'Sri Lanka') {
+      if (!/^\+94\d{9}$/.test(tourist_phone.trim())) {
+        detailErrs.push('Resident bookings require a valid Sri Lankan mobile number (+94XXXXXXXXX).');
+      }
+    } else if (!/^\+?[\d\s\-()+.]{5,20}$/.test(tourist_phone.trim())) {
       detailErrs.push('Invalid phone number format.');
     }
     if (!tourist_country?.trim()) {

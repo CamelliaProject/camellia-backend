@@ -294,6 +294,14 @@ export async function sendBookingConfirmationEmail(to, touristName, booking, exp
           contact us at <a href="mailto:${process.env.EMAIL_USER}" style="color:#1B4332;">${process.env.EMAIL_USER}</a>.
         </p>
       </div>
+
+      ${booking.tourist_country === 'Sri Lanka' ? `
+      <div style="background:#fffbeb;border-left:4px solid #f59e0b;padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0;color:#92400e;font-size:14px;">
+          <strong>Resident pricing reminder:</strong> please bring your physical NIC (matching the number on your
+          booking) to the gate — it will be checked against your booking before entry.
+        </p>
+      </div>` : ''}
     `),
   });
 }
