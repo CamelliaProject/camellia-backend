@@ -346,6 +346,34 @@ export async function sendSubscriptionRenewalReminderEmail(to, ownerName, planta
   });
 }
 
+export async function sendPasswordResetEmail(to, ownerName, resetUrl) {
+  if (!isEmailConfigured()) return;
+  const transporter = createTransporter();
+  await transporter.sendMail({
+    from: `"Camellia Platform" <${process.env.EMAIL_USER}>`,
+    to,
+    subject: 'Reset Your Plantation Admin Password — Camellia',
+    html: wrap(`
+      <h2 style="color:#1B4332;margin-top:0;">Password Reset Request</h2>
+      <p>Dear <strong>${ownerName}</strong>,</p>
+      <p>We received a request to reset the password for your Plantation Admin account. Click the button below to choose a new password.</p>
+
+      <div style="text-align:center;margin:32px 0;">
+        <a href="${resetUrl}"
+           style="display:inline-block;background:#1B4332;color:#fff;font-weight:700;font-size:16px;padding:14px 36px;border-radius:12px;text-decoration:none;">
+          Reset Password →
+        </a>
+      </div>
+
+      <div style="background:#fff7ed;border-left:4px solid #f97316;padding:16px;border-radius:4px;margin:24px 0;">
+        <p style="margin:0;color:#c2410c;font-size:13px;">
+          This link expires in 30 minutes and can only be used once. If you didn't request this, you can safely ignore this email.
+        </p>
+      </div>
+    `),
+  });
+}
+
 export async function sendRejectionNotice(to, ownerName, plantationName, reason) {
   if (!isEmailConfigured()) return;
   const transporter = createTransporter();

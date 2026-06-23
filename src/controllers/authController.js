@@ -1,5 +1,13 @@
+import crypto from 'crypto';
 import pool from '../config/db.js';
 import admin from '../services/firebaseAdmin.js';
+import { sendPasswordResetEmail } from '../services/emailService.js';
+
+const RESET_TOKEN_TTL_MS = 30 * 60 * 1000; // 30 minutes
+
+function hashToken(token) {
+  return crypto.createHash('sha256').update(token).digest('hex');
+}
 
 export async function changePlantationAdminPassword(req, res) {
   try {
@@ -19,6 +27,87 @@ export async function changePlantationAdminPassword(req, res) {
   } catch (error) {
     console.error('changePlantationAdminPassword error:', error);
     return res.status(500).json({ error: 'Failed to change password.' });
+  }
+}
+
+export async function forgotPlantationAdminPassword(req, res) {
+  try {
+    const { username } = req.body;
+    if (!username || typeof username !== 'string' || !username.trim()) {
+      return res.status(400).json({ error: 'Username is required.' });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT u.id, u.name, p.email AS real_email
+       FROM users u
+       JOIN plantations p ON p.id = u.plantation_id
+       WHERE u.username = $1 AND u.role = 'plantationadmin'
+       LIMIT 1`,
+      [username.trim()]
+    );
+
+    // Always return a generic response — don't reveal whether the username exists.
+    const genericResponse = { success: true, message: 'If that account exists, a reset link has been sent to its registered email.' };
+
+    if (!rows.length || !rows[0].real_email) {
+      return res.status(200).json(genericResponse);
+    }
+
+    const user = rows[0];
+    const token = crypto.randomBytes(32).toString('hex');
+    const tokenHash = hashToken(token);
+    const expires = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+
+    await pool.query(
+      `UPDATE users SET reset_token_hash = $1, reset_token_expires = $2, updated_at = now() WHERE id = $3`,
+      [tokenHash, expires, user.id]
+    );
+
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
+    const resetUrl = `${frontendUrl}/plantationadmin/reset-password?token=${token}`;
+    sendPasswordResetEmail(user.real_email, user.name || 'Plantation Admin', resetUrl)
+      .catch(err => console.error('Password reset email failed:', err.message));
+
+    return res.status(200).json(genericResponse);
+  } catch (error) {
+    console.error('forgotPlantationAdminPassword error:', error);
+    return res.status(500).json({ error: 'Failed to process request.' });
+  }
+}
+
+export async function resetPlantationAdminPassword(req, res) {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || typeof token !== 'string') {
+      return res.status(400).json({ error: 'Reset token is required.' });
+    }
+    if (!newPassword || typeof newPassword !== 'string' || newPassword.length < 6) {
+      return res.status(400).json({ error: 'Password must be at least 6 characters.' });
+    }
+
+    const tokenHash = hashToken(token);
+    const { rows } = await pool.query(
+      `SELECT id FROM users
+       WHERE reset_token_hash = $1 AND reset_token_expires > now() AND role = 'plantationadmin'
+       LIMIT 1`,
+      [tokenHash]
+    );
+
+    if (!rows.length) {
+      return res.status(400).json({ error: 'Invalid or expired reset link.' });
+    }
+
+    await pool.query(
+      `UPDATE users
+       SET password_hash = $1, password_changed = true, reset_token_hash = NULL, reset_token_expires = NULL, updated_at = now()
+       WHERE id = $2`,
+      [newPassword, rows[0].id]
+    );
+
+    return res.status(200).json({ success: true });
+  } catch (error) {
+    console.error('resetPlantationAdminPassword error:', error);
+    return res.status(500).json({ error: 'Failed to reset password.' });
   }
 }
 
