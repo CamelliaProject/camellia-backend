@@ -79,8 +79,7 @@ export async function updateBookingStatus(req, res) {
         }
       }
 
-      // Count-based capacity — cancelling the booking record is sufficient;
-      // availability queries already exclude cancelled status.
+      
     }
 
     const cancelledBy = status === 'cancelled' ? 'admin' : null;

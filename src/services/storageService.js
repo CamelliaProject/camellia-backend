@@ -21,7 +21,7 @@ export async function uploadFile(fileBuffer, { folder = 'camellia', resourceType
   });
 }
 
-// Backward-compatible alias used by other controllers
+
 export async function uploadImage(fileBuffer) {
   return uploadFile(fileBuffer, { folder: 'camellia/plantations', resourceType: 'image' });
 }

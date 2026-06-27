@@ -263,7 +263,7 @@ export async function payhereNotify(req, res) {
   }
 }
 
-// ── Save PayHere payment_id from return URL (fallback for localhost dev) ──
+
 export async function savePayHerePayment(req, res) {
   try {
     const user = req.user;
@@ -273,7 +273,7 @@ export async function savePayHerePayment(req, res) {
       return res.status(400).json({ error: 'booking_reference is required.' });
     }
 
-    // Only update if this booking belongs to the authenticated tourist
+    
     const { rows: updated } = await pool.query(
       `UPDATE bookings
        SET payhere_payment_id = COALESCE($1, payhere_payment_id), updated_at = now()
@@ -427,7 +427,7 @@ export async function confirmSubscriptionPayment(req, res) {
   }
 }
 
-// ── Subscription renewal: initiate PayHere for renewal ───────────────────────
+
 export async function initiateSubscriptionRenewal(req, res) {
   try {
     const { subscription_id } = req.body;
@@ -511,7 +511,7 @@ export async function confirmSubscriptionRenewal(req, res) {
       [newEnd.toISOString().slice(0,10), payment_id || null, subscription_id]
     );
 
-    // Re-enable plantation if it was disabled
+    
     await pool.query(
       `UPDATE plantations SET is_disabled = false, updated_at = now() WHERE id = $1`,
       [sub.plantation_id]

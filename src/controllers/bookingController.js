@@ -31,7 +31,7 @@ export async function createBooking(req, res) {
       return res.status(400).json({ error: 'Missing required booking fields.' });
     }
 
-    // Server-side validation of tourist detail fields (mirrors initiatePayHere)
+    
     const detailErrs = [];
     if (!tourist_phone?.trim()) {
       detailErrs.push('Phone number is required.');

@@ -1,9 +1,4 @@
-/**
- * Minimal migration runner.
- * Reads every *.sql file in this directory (sorted), tracks which ones have
- * been applied in a `schema_migrations` table, and runs the rest.
- * Safe to call on every server start — already-applied migrations are skipped.
- */
+
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

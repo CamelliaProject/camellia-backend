@@ -3,7 +3,7 @@ import { getUsdToLkrRate } from '../utils/exchangeRate.js';
 
 const router = Router();
 
-// Public — no auth required; exchange rate is not sensitive.
+
 router.get('/exchange-rate', async (req, res) => {
   try {
     const rate = await getUsdToLkrRate();

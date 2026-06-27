@@ -6,7 +6,7 @@ dotenv.config();
 
 const { Pool } = pg;
 
-// Create a connection pool using your local .env DATABASE_URL
+// Create a connection pool 
 const pool = new Pool({
     connectionString: process.env.DATABASE_URL,
 });

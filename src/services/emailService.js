@@ -1,8 +1,7 @@
 import nodemailer from 'nodemailer';
 
 function createTransporter() {
-  // If EMAIL_HOST is set, use generic SMTP (Brevo, Mailgun, etc.)
-  // Otherwise fall back to Gmail service shorthand
+  
   if (process.env.EMAIL_HOST) {
     return nodemailer.createTransport({
       host: process.env.EMAIL_HOST,

@@ -46,7 +46,7 @@ export async function forgotPlantationAdminPassword(req, res) {
       [username.trim()]
     );
 
-    // Always return a generic response — don't reveal whether the username exists.
+    
     const genericResponse = { success: true, message: 'If that account exists, a reset link has been sent to its registered email.' };
 
     if (!rows.length || !rows[0].real_email) {
@@ -153,8 +153,7 @@ export async function adminLogin(req, res) {
       await pool.query('UPDATE users SET uid = $1, updated_at = now() WHERE id = $2', [firebaseUid, user.id]);
     }
 
-    // Issue a Firebase Custom Token — the client exchanges this for a real ID token
-    // via signInWithCustomToken(), after which all protected API calls work normally.
+    
     const customToken = await admin.auth().createCustomToken(firebaseUid, { role: user.role });
 
     return res.status(200).json({

@@ -2,7 +2,7 @@ import pool from '../config/db.js';
 
 const DOW_NAMES = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
 
-// ── Experience weekly slots ───────────────────────────────────────────────────
+
 
 export async function getWeeklySlots(req, res) {
   const { id: experienceId } = req.params;
@@ -281,7 +281,6 @@ async function getBookedGuestsForPlantationSlot(slot) {
   return rows[0].booked_guests;
 }
 
-// ── Plantation-level time slots ───────────────────────────────────────────────
 
 export async function getPlantationTimeSlots(req, res) {
   const { id: plantationId } = req.params;
@@ -394,10 +393,7 @@ export async function deletePlantationTimeSlot(req, res) {
   }
 }
 
-/**
- * GET /plantations/:id/time-slots/availability?date=YYYY-MM-DD
- * Returns plantation time slots for that date's day-of-week with live booked count.
- */
+
 export async function getPlantationSlotAvailability(req, res) {
   const { id: plantationId } = req.params;
   const { date } = req.query;

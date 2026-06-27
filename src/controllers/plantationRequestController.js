@@ -15,7 +15,7 @@ function generateUsername(plantationName) {
   return `${slug}_${rand}`;
 }
 
-// ── Controllers ────────────────────────────────────────────────────────────
+
 
 export async function createPlantationRequest(req, res) {
   try {

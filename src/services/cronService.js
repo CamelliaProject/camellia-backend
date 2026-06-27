@@ -39,9 +39,7 @@ async function runSubscriptionReminderCheck() {
         );
       }
 
-      // Reconcile plantation access with actual payment status:
-      // currently within the paid period → always enabled; unpaid past the
-      // grace period → disabled. Covers stale/manually-set is_disabled flags.
+      
       if (daysLeft >= 0 && sub.is_disabled) {
         await pool.query(
           `UPDATE plantations SET is_disabled = false, updated_at = now() WHERE id = $1`,
@@ -88,7 +86,7 @@ async function runSubscriptionReminderCheck() {
 }
 
 export function startCronJobs() {
-  // Run once at startup, then every 24 hours
+
   runSubscriptionReminderCheck();
   setInterval(runSubscriptionReminderCheck, 24 * 60 * 60 * 1000);
   console.log('[cron] Subscription reminder scheduler started (daily)');
